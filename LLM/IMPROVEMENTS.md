@@ -21,7 +21,7 @@ chunk.metadata = {
     "cat_id": 2,                       # ← 카테고리 ID 추가
     "content_sum": "요약 텍스트",      # ← 요약 내용 추가
     "created_at": "2026-05-29T12:30"  # ← 생성 시간 추가
-}
+}      
 ```
 
 **효과:** PostgreSQL의 doc, category 테이블과 동기화 가능
