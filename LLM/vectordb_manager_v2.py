@@ -47,7 +47,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 import psycopg2
 from datetime import datetime
-from config import EMBEDDING_CONFIG, DB_CONFIG, CHROMA_DB_PATH
+from .config import EMBEDDING_CONFIG, DB_CONFIG, CHROMA_DB_PATH
 
 class ImprovedVectorDBManager:
     """

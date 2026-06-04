@@ -13,7 +13,7 @@ LLM 모듈 - 대형 언어 모델 관리
 """
 
 from langchain_ollama import ChatOllama
-from config import LLM_CONFIG
+from .config import LLM_CONFIG, CURRENT_MODEL
 import requests
 import time
 
@@ -63,11 +63,29 @@ class LLMManager:
         - str: LLM이 생성한 답변
         """
         try:
+            print(f"[DEBUG] LLM 호출 시작: 모델={LLM_CONFIG['model_name']}, URL={LLM_CONFIG['base_url']}")
             response = self.llm.invoke(prompt)
+            
+            # response 디버깅
+            print(f"[DEBUG] LLM 응답 타입: {type(response)}")
+            print(f"[DEBUG] LLM 응답: {response}")
+            
+            if response is None:
+                print("[ERROR] LLM이 None을 반환했습니다")
+                return "에러: LLM이 응답하지 않았습니다"
+            
             answer = response.content if hasattr(response, 'content') else str(response)
+            
+            if not answer:
+                print("[ERROR] LLM 응답 내용이 비어있습니다")
+                return "에러: LLM이 비어있는 응답을 반환했습니다"
+            
+            print(f"[DEBUG] 생성된 답변: {answer[:100]}...")
             return answer
         except Exception as e:
             print(f"✗ LLM 답변 생성 실패: {e}")
+            import traceback
+            traceback.print_exc()
             return f"에러: {str(e)}"
     
     def create_rag_prompt(self, context_text: str, query: str) -> str:
@@ -85,7 +103,7 @@ class LLMManager:
         반환값:
         - str: LLM에 전달할 프롬프트
         """
-        prompt = f"""다음 문서를 기반으로 질문에 답변하세요.
+        prompt = f"""다음 법적 문서를 기반으로 질문에 답변하세요.
 
 [참고 문서]
 {context_text}
@@ -94,11 +112,12 @@ class LLMManager:
 {query}
 
 [지시사항]
-- 문서에 없는 정보는 "문서에서 해당 정보를 찾을 수 없습니다"라고 답변
-- 정확하고 간결하게 답변
-- 필요하면 문서의 내용을 인용
+- 참고 문서의 내용을 바탕으로 질문에 최대한 상세하고 정확하게 답변
+- 문서에 명확히 없는 정보만 "문서에서 확인할 수 없습니다"라고 표시
+- 판례, 법규, 사실 관계 등을 문서에서 직접 인용하여 설명
+- 법적 용어와 판례 내용을 명확하게 전달
 
-[답변]"""
+[답변]"""  
         return prompt
     
     def get_config_summary(self) -> str:
@@ -108,7 +127,7 @@ class LLMManager:
         반환값:
         - str: LLM 설정 요약
         """
-        return f"모델: {LLM_CONFIG['model_name']}, 온도: {LLM_CONFIG['temperature']}, URL: {LLM_CONFIG['base_url']}"
+        return f"모델: {CURRENT_MODEL}, 온도: {LLM_CONFIG['temperature']}, URL: {LLM_CONFIG['base_url']}"
     
     def get_llm_instance(self):
         """

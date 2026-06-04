@@ -1,7 +1,13 @@
 import os
+import sys
 import shutil
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
+
+# LLM 디렉토리를 Python 경로에 추가
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # LangChain 모듈
 from langchain_community.document_loaders import PyPDFLoader
@@ -9,18 +15,43 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 
 # 로컬 모듈 import
+config = None
+llm_module = None
+rag_pipeline = None
+ingest = None
+
 try:
-    from config import API_CONFIG, CHROMA_DB_PATH, EMBEDDING_CONFIG, LLM_CONFIG
-    from llm_module import get_llm_manager, check_ollama_server
-    from rag_pipeline_v2 import ImprovedRAGPipeline
-    from ingest import ingest_pdf  # 벡터화 모듈
+    from .config import API_CONFIG, CHROMA_DB_PATH, EMBEDDING_CONFIG, LLM_CONFIG, CURRENT_MODEL
+    config = "loaded"
 except ImportError as e:
-    print(f"Import error: {e}")
-    # 기본값 설정
+    print(f"[ERROR] config 모듈 import 실패: {e}")
     API_CONFIG = {"title": "LLM RAG API", "description": "민사법 질의응답 시스템", "version": "1.0"}
     CHROMA_DB_PATH = "./chroma_pdf_db"
     EMBEDDING_CONFIG = {"model_name": "BAAI/bge-m3", "device": "cpu"}
-    LLM_CONFIG = {"model_name": "gemma3n:e2b", "temperature": 0.7, "base_url": "http://localhost:11434"}
+    CURRENT_MODEL = "gemma3n:e2b"
+    LLM_CONFIG = {"model_name": CURRENT_MODEL, "temperature": 0.7, "base_url": "http://localhost:11434"}
+
+try:
+    from .llm_module import get_llm_manager, check_ollama_server
+    llm_module = "loaded"
+except ImportError as e:
+    print(f"[ERROR] llm_module 모듈 import 실패: {e}")
+    get_llm_manager = None
+    check_ollama_server = None
+
+try:
+    from rag_pipeline_v2 import ImprovedRAGPipeline
+    rag_pipeline = "loaded"
+except ImportError as e:
+    print(f"[ERROR] rag_pipeline_v2 모듈 import 실패: {e}")
+    print(f"[DEBUG] 이유: {e.__class__.__name__}: {str(e)}")
+    ImprovedRAGPipeline = None
+
+try:
+    from ingest import ingest_pdf  # 벡터화 모듈
+    ingest = "loaded"
+except ImportError as e:
+    print(f"[ERROR] ingest 모듈 import 실패: {e}")
     ingest_pdf = None
 
 app = FastAPI(
@@ -28,6 +59,10 @@ app = FastAPI(
     description=API_CONFIG.get("description", "민사법 질의응답 시스템"),
     version=API_CONFIG.get("version", "1.0")
 )
+
+# 비동기 처리를 위한 ThreadPoolExecutor (최대 3개 동시 처리)
+executor = ThreadPoolExecutor(max_workers=3)
+# Note: Model config from CURRENT_MODEL in config.py (v1.1)
 
 # ===================== Helper Functions =====================
 
@@ -127,7 +162,7 @@ async def upload_and_summarize(
             return {"status": "error", "detail": f"PDF 로드 오류: {str(load_error)[:100]}"}
         
         llm = ChatOllama(
-            model=LLM_CONFIG.get("model_name", "gemma3n:e2b"),
+            model=LLM_CONFIG.get("model_name", CURRENT_MODEL),
             temperature=LLM_CONFIG.get("temperature", 0.7),
             base_url=LLM_CONFIG.get("base_url", "http://localhost:11434")
         )
@@ -156,7 +191,7 @@ async def upload_and_summarize(
         
         return {
             "status": "success",
-            "model_used": LLM_CONFIG.get("model_name", "gemma3n:e2b"),
+            "model_used": {CURRENT_MODEL},  # config.py에서 설정한 현재 모델명 (동적 반영)
             "doc_id": doc_id,
             "summary": summary.get('output_text', '요약을 생성할 수 없습니다.')
         }
@@ -239,29 +274,63 @@ async def batch_upload(
 async def query_documents(
     question: str = Form(...),
     user_id: int = Form(default=1),
-    cat_id: int = Form(default=None)
+    cat_id: int = Form(default=0)
 ):
-    """RAG 기반 질의응답"""
+    """RAG 기반 질의응답 (비동기 처리)"""
     try:
         if not question or not question.strip():
             return {"status": "error", "detail": "질문을 입력해주세요."}
         
-        # RAG 파이프라인 초기화 및 실행
+        # RAG 파이프라인 모듈 로드 확인
+        if ImprovedRAGPipeline is None:
+            return {
+                "status": "error",
+                "detail": "RAG 파이프라인 모듈을 로드할 수 없습니다. 서버 로그를 확인하세요.",
+                "module_status": {
+                    "config": config,
+                    "llm_module": llm_module,
+                    "rag_pipeline": rag_pipeline,
+                    "ingest": ingest
+                }
+            }
+        
+        # RAG 파이프라인 초기화
         pipeline = ImprovedRAGPipeline()
-        result = pipeline.query_with_context(
-            query=question.strip(),
-            user_id=user_id,
-            cat_id=cat_id,
-            top_k=3
+        
+        # 비동기로 RAG 처리 실행 (ThreadPoolExecutor 사용)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            executor,
+            lambda: pipeline.query_with_context(
+                query=question.strip(),
+                user_id=user_id,
+                cat_id=cat_id,
+                top_k=3
+            )
         )
         
-        # 쿼리 히스토리 로깅
-        pipeline.log_query_history(
-            user_id=user_id,
-            query=question,
-            answer=result.get('answer', ''),
-            references=result.get('references', [])
+        # 쿼리 히스토리 로깅 (비동기 백그라운드 처리)
+        loop.run_in_executor(
+            executor,
+            lambda: pipeline.log_query_history(
+                user_id=user_id,
+                query=question,
+                answer=result.get('answer', ''),
+                references=result.get('references', [])
+            )
         )
+        
+        # RAG 파이프라인 결과 확인 (에러 여부 확인)
+        if result.get('status') == 'error':
+            return {
+                "status": "error",
+                "question": question,
+                "detail": result.get('message', result.get('detail', '알 수 없는 에러')),
+                "filters": {
+                    "user_id": user_id,
+                    "cat_id": cat_id
+                }
+            }
         
         return {
             "status": "success",
@@ -287,7 +356,7 @@ async def health():
             "status": "healthy" if ollama_status["available"] else "degraded",
             "message": "Server is running",
             "models": ollama_status.get("models", []),
-            "current_model": LLM_CONFIG.get("model_name", "gemma3n:e2b"),
+            "current_model": CURRENT_MODEL,
             "server_url": LLM_CONFIG.get("base_url", "http://localhost:11434")
         }
     except Exception as e:
