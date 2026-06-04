@@ -59,8 +59,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 import psycopg2
 from datetime import datetime
 import hashlib
-from .config import EMBEDDING_CONFIG, DB_CONFIG, CHROMA_DB_PATH
-from .llm_module import get_llm_manager
+from config import EMBEDDING_CONFIG, DB_CONFIG, CHROMA_DB_PATH
+from llm_module import get_llm_manager
 
 class ImprovedRAGPipeline:
     """

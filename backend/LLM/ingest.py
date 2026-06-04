@@ -30,7 +30,7 @@ from langchain_chroma import Chroma
 
 # 설정 import
 try:
-    from .config import CHROMA_DB_PATH, EMBEDDING_CONFIG
+    from config import CHROMA_DB_PATH, EMBEDDING_CONFIG
 except ImportError:
     print("경고: config.py를 찾을 수 없습니다. 기본값을 사용합니다.")
     CHROMA_DB_PATH = "./chroma_pdf_db"

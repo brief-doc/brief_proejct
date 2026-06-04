@@ -14,7 +14,7 @@ import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 try:
-    from .config import CHROMA_DB_PATH, EMBEDDING_CONFIG
+    from config import CHROMA_DB_PATH, EMBEDDING_CONFIG
 except ImportError:
     CHROMA_DB_PATH = "./chroma_pdf_db"
     EMBEDDING_CONFIG = {"model_name": "BAAI/bge-m3", "device": "cpu"}

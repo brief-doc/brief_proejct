@@ -21,7 +21,7 @@ rag_pipeline = None
 ingest = None
 
 try:
-    from .config import API_CONFIG, CHROMA_DB_PATH, EMBEDDING_CONFIG, LLM_CONFIG, CURRENT_MODEL
+    from config import API_CONFIG, CHROMA_DB_PATH, EMBEDDING_CONFIG, LLM_CONFIG, CURRENT_MODEL
     config = "loaded"
 except ImportError as e:
     print(f"[ERROR] config 모듈 import 실패: {e}")
@@ -32,7 +32,7 @@ except ImportError as e:
     LLM_CONFIG = {"model_name": CURRENT_MODEL, "temperature": 0.7, "base_url": "http://localhost:11434"}
 
 try:
-    from .llm_module import get_llm_manager, check_ollama_server
+    from llm_module import get_llm_manager, check_ollama_server
     llm_module = "loaded"
 except ImportError as e:
     print(f"[ERROR] llm_module 모듈 import 실패: {e}")
@@ -330,7 +330,7 @@ async def summarize_markdown(
             return {"status": "error", "detail": "마크다운 텍스트가 비어있습니다"}
         
         try:
-            from .markdown_processor import MarkdownProcessor
+            from markdown_processor import MarkdownProcessor
         except ImportError:
             return {"status": "error", "detail": "마크다운 처리 모듈을 찾을 수 없습니다"}
         

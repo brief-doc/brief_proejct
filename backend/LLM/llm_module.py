@@ -13,7 +13,7 @@ LLM 모듈 - 대형 언어 모델 관리
 """
 
 from langchain_ollama import ChatOllama
-from .config import LLM_CONFIG, CURRENT_MODEL
+from config import LLM_CONFIG, CURRENT_MODEL
 import requests
 import time
 
