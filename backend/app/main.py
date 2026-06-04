@@ -1,10 +1,77 @@
 import os
-from fastapi import FastAPI
+import sys
+from pathlib import Path
+from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
 from sqlalchemy import create_engine, text
 import redis
-from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+# 부모 디렉토리를 Python 경로에 추가 (backend 패키지 접근 가능)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+
+# LangChain 모듈
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+
+# 로컬 모듈 import
+config = None
+llm_module = None
+rag_pipeline = None
+ingest = None
+
+try:
+    from backend.app.LLM.config import API_CONFIG, CHROMA_DB_PATH, EMBEDDING_CONFIG, LLM_CONFIG, CURRENT_MODEL
+    config = "loaded"
+except ImportError as e:
+    print(f"[ERROR] config 모듈 import 실패: {e}")
+    API_CONFIG = {"title": "LLM RAG API", "description": "민사법 질의응답 시스템", "version": "1.0"}
+    CHROMA_DB_PATH = "./chroma_pdf_db"
+    EMBEDDING_CONFIG = {"model_name": "BAAI/bge-m3", "device": "cpu"}
+    CURRENT_MODEL = "gemma3n:e2b"
+    LLM_CONFIG = {"model_name": CURRENT_MODEL, "temperature": 0.7, "base_url": "http://localhost:11434"}
+
+try:
+    from backend.app.LLM.llm_module import get_llm_manager, check_ollama_server
+    llm_module = "loaded"
+except ImportError as e:
+    print(f"[ERROR] llm_module 모듈 import 실패: {e}")
+    get_llm_manager = None
+    check_ollama_server = None
+  
+try:
+    from backend.app.LLM.rag_pipeline_v2 import ImprovedRAGPipeline
+    rag_pipeline = "loaded"
+except ImportError as e:
+    print(f"[ERROR] rag_pipeline_v2 모듈 import 실패: {e}")
+    print(f"[DEBUG] 이유: {e.__class__.__name__}: {str(e)}")
+    ImprovedRAGPipeline = None
+
+try:
+    from backend.app.LLM.ingest import ingest_markdown  # 마크다운 처리
+except ImportError as e:
+    print(f"[ERROR] ingest 모듈 import 실패: {e}")
+    ingest_markdown = None
+
+try:
+    from backend.app.LLM.vector_db_operations import (
+        save_pdf_to_vector_db,
+        save_markdown_to_vector_db,
+        batch_save_to_vector_db
+    )
+except ImportError as e:
+    print(f"[ERROR] vector_db_operations 모듈 import 실패: {e}")
+    save_pdf_to_vector_db = None
+    save_markdown_to_vector_db = None
+    batch_save_to_vector_db = None
+
+app = FastAPI(
+    title=API_CONFIG.get("title", "LLM RAG API"),
+    description=API_CONFIG.get("description", "민사법 질의응답 시스템"),
+    version=API_CONFIG.get("version", "1.0")
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,27 +81,367 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# PostgreSQL 연결
-engine = create_engine(os.environ["DATABASE_URL"])
+# PostgreSQL 연결 (환경변수가 없으면 로컬 DB 사용)
+try:
+    database_url = os.environ.get("DATABASE_URL", "postgresql://user:password@localhost/briefdoc")
+    engine = create_engine(database_url)
+except Exception as e:
+    print(f"[WARNING] PostgreSQL 연결 실패: {e}")
+    engine = None
 
-# Redis 연결
-redis_client = redis.from_url(os.environ["REDIS_URL"])
+# Redis 연결 (환경변수가 없으면 로컬 Redis 사용)
+try:
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+    redis_client = redis.from_url(redis_url)
+except Exception as e:
+    print(f"[WARNING] Redis 연결 실패: {e}")
+    redis_client = None
+
+# 비동기 처리를 위한 ThreadPoolExecutor (최대 3개 동시 처리)
+executor = ThreadPoolExecutor(max_workers=3)
+
+
+# ===================== Helper Functions =====================
+
+def is_valid_pdf(file_path: str) -> tuple:
+    """PDF 파일 유효성 검증 - PyPDFLoader로 실제 읽기 가능 여부 확인"""
+    if not file_path.lower().endswith('.pdf'):
+        return False, "파일 확장자가 .pdf가 아닙니다"
+    
+    try:
+        # 파일이 존재하는지 확인
+        if not os.path.exists(file_path):
+            return False, "파일을 찾을 수 없습니다"
+        
+        # 파일 크기 확인 (0보다 커야 함)
+        if os.path.getsize(file_path) == 0:
+            return False, "파일이 비어있습니다"
+        
+        # 실제 PyPDFLoader로 로드 가능 여부 확인
+        loader = PyPDFLoader(file_path)
+        test_docs = loader.load()
+        
+        if not test_docs:
+            return False, "PDF에서 텍스트를 추출할 수 없습니다"
+        
+        return True, "OK"
+    except Exception as e:
+        return False, f"PDF 로드 실패: {str(e)[:100]}"
 
 
 @app.get("/")
 def root():
-    return {"message": "FastAPI + Postgres + Redis 정상 작동 중!"}
+    return {"message": "FastAPI + Postgres + Redis + LLM RAG 정상 작동 중!"}
 
 
 @app.get("/health")
 def health():
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
-    redis_client.ping()
-    return {"db": "ok", "redis": "ok"}
+    """기본 서버 상태 확인"""
+    status = {}
+    
+    if engine:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            status["db"] = "ok"
+        except Exception as e:
+            status["db"] = f"error: {str(e)[:50]}"
+    else:
+        status["db"] = "not configured"
+    
+    if redis_client:
+        try:
+            redis_client.ping()
+            status["redis"] = "ok"
+        except Exception as e:
+            status["redis"] = f"error: {str(e)[:50]}"
+    else:
+        status["redis"] = "not configured"
+    
+    return status
 
 
 @app.get("/counter")
 def counter():
     count = redis_client.incr("visits")
     return {"visits": count}
+
+
+# ===================== PDF Upload & Summarize =====================
+
+@app.post("/upload-and-summarize/")
+async def upload_and_summarize(
+    file: UploadFile = File(...),
+    doc_id: int = Form(...),
+    user_id: int = Form(...)
+):
+    """PDF 파일을 업로드하고 요약 (벡터 DB 저장은 별도 엔드포인트)"""
+    try:
+        # 임시 파일 저장 (절대 경로 사용)
+        import uuid
+        pdf_dir = os.path.join(os.getcwd(), "pdf_files")
+        os.makedirs(pdf_dir, exist_ok=True)
+        
+        # 고유한 파일명 생성
+        unique_filename = f"temp_{uuid.uuid4().hex}_{file.filename}"
+        temp_path = os.path.join(pdf_dir, unique_filename)
+        
+        # 파일 내용 읽기
+        file_content = await file.read()
+        
+        # 파일이 비어있는지 확인
+        if not file_content:
+            return {"status": "error", "detail": "업로드된 파일이 비어있습니다."}
+        
+        # 파일 저장
+        with open(temp_path, "wb") as buffer:
+            buffer.write(file_content)
+        
+        # PDF 유효성 검증
+        is_valid, msg = is_valid_pdf(temp_path)
+        if not is_valid:
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+            return {"status": "error", "detail": f"유효한 PDF 파일이 아닙니다: {msg}"}
+        
+        # PDF 로드 및 요약
+        from langchain_ollama import ChatOllama
+        
+        try:
+            loader = PyPDFLoader(temp_path)
+            documents = loader.load()
+            if not documents:
+                return {"status": "error", "detail": "PDF에서 텍스트를 추출할 수 없습니다."}
+        except Exception as load_error:
+            return {"status": "error", "detail": f"PDF 로드 오류: {str(load_error)[:100]}"}
+        
+        llm = ChatOllama(
+            model=LLM_CONFIG.get("model_name", CURRENT_MODEL),
+            temperature=LLM_CONFIG.get("temperature", 0.7),
+            base_url=LLM_CONFIG.get("base_url", "http://localhost:11434")
+        )
+        
+        # 간단한 요약 로직 (load_summarize_chain 대체)
+        try:
+            # 처음 5개 페이지의 내용을 합침 (길이 제한을 위해)
+            texts = [doc.page_content for doc in documents[:5]]
+            combined_text = "\n\n".join(texts)[:2000]  # 2000자로 제한
+            
+            # LLM에 요약 요청
+            summary_prompt = f"""다음 PDF 내용을 한국어로 간결하게 요약해주세요:
+
+{combined_text}
+
+요약:"""
+            
+            summary_response = llm.invoke(summary_prompt)
+            summary_text = summary_response.content if hasattr(summary_response, 'content') else str(summary_response)
+            summary = {"output_text": summary_text}
+        except Exception as summary_error:
+            summary = {"output_text": f"요약 생성 중 오류: {str(summary_error)[:100]}"}
+        
+        return {
+            "status": "success",
+            "model_used": {CURRENT_MODEL},
+            "doc_id": doc_id,
+            "summary": summary.get('output_text', '요약을 생성할 수 없습니다.'),
+            "file_path": temp_path
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+# ===================== Markdown Upload & Process =====================
+
+@app.post("/upload-markdown/")
+async def upload_markdown(
+    markdown_text: str = Form(...),
+    doc_id: int = Form(...),
+    user_id: int = Form(...),
+    doc_name: str = Form(default="마크다운 문서"),
+    chunking_method: str = Form(default="sections"),
+    enable_summary: bool = Form(default=True)
+):
+    """마크다운 텍스트를 청킹하고 요약하여 저장"""
+    try:
+        # 입력 검증
+        if not markdown_text or not markdown_text.strip():
+            return {"status": "error", "detail": "마크다운 텍스트가 비어있습니다"}
+        
+        if len(markdown_text) > 1000000:  # 1MB 제한
+            return {"status": "error", "detail": "텍스트가 너무 깁니다 (최대 1MB)"}
+        
+        # 벡터 DB에 저장 (vector_db_operations 사용)
+        if save_markdown_to_vector_db is None:
+            return {"status": "error", "detail": "벡터 DB 저장 모듈을 찾을 수 없습니다"}
+        
+        # 마크다운 벡터화 및 저장
+        result = save_markdown_to_vector_db(
+            markdown_content=markdown_text,
+            doc_id=doc_id,
+            user_id=user_id,
+            doc_name=doc_name,
+            chunking_method=chunking_method,
+            enable_summary=enable_summary
+        )
+        
+        return {
+            "status": result.get("status", "success"),
+            "doc_id": doc_id,
+            "doc_name": doc_name,
+            "total_chunks": result.get("total_chunks", 0),
+            "detail": result.get("detail", "마크다운이 처리되었습니다"),
+            "chunking_method": chunking_method,
+            "summary_enabled": enable_summary
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+@app.post("/summarize-markdown/")
+async def summarize_markdown(
+    markdown_text: str = Form(...),
+    chunking_method: str = Form(default="sections")
+):
+    """마크다운 텍스트를 청킹하고 각 청크를 요약
+    
+    Note: ChromaDB에 저장하지 않고 요약만 반환
+    """
+    try:
+        if not markdown_text or not markdown_text.strip():
+            return {"status": "error", "detail": "마크다운 텍스트가 비어있습니다"}
+        
+        try:
+            from backend.app.LLM.markdown_processor import MarkdownProcessor
+        except ImportError:
+            return {"status": "error", "detail": "마크다운 처리 모듈을 찾을 수 없습니다"}
+        
+        # 마크다운 처리기 초기화
+        processor = MarkdownProcessor()
+        
+        # 청킹 수행
+        if chunking_method == "sections":
+            chunks = processor.chunk_by_sections(markdown_text)
+        else:
+            chunks = processor.chunk_by_size(markdown_text)
+        
+        # 각 청크 요약 생성
+        results = []
+        for i, chunk in enumerate(chunks, 1):
+            summary = processor.summarize_chunk(chunk.get('content', ''))
+            results.append({
+                "chunk_id": i,
+                "section": chunk.get('section', chunk.get('id', 'N/A')),
+                "original": chunk.get('content', '')[:200] + "...",
+                "summary": summary,
+                "char_count": chunk.get('char_count', 0)
+            })
+        
+        return {
+            "status": "success",
+            "total_chunks": len(results),
+            "chunking_method": chunking_method,
+            "chunks": results
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+# ===================== Query (RAG) =====================
+
+@app.post("/query/")
+async def query_documents(
+    question: str = Form(...),
+    user_id: int = Form(default=1),
+    cat_id: int = Form(default=0)
+):
+    """RAG 기반 질의응답 (비동기 처리)"""
+    try:
+        if not question or not question.strip():
+            return {"status": "error", "detail": "질문을 입력해주세요."}
+        
+        # RAG 파이프라인 모듈 로드 확인
+        if ImprovedRAGPipeline is None:
+            return {
+                "status": "error",
+                "detail": "RAG 파이프라인 모듈을 로드할 수 없습니다. 서버 로그를 확인하세요.",
+                "module_status": {
+                    "config": config,
+                    "llm_module": llm_module,
+                    "rag_pipeline": rag_pipeline
+                }
+            }
+        
+        # RAG 파이프라인 초기화
+        pipeline = ImprovedRAGPipeline()
+        
+        # 비동기로 RAG 처리 실행 (ThreadPoolExecutor 사용)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            executor,
+            lambda: pipeline.query_with_context(
+                query=question.strip(),
+                user_id=user_id,
+                cat_id=cat_id,
+                top_k=3
+            )
+        )
+        
+        # 쿼리 히스토리 로깅 (비동기 백그라운드 처리)
+        loop.run_in_executor(
+            executor,
+            lambda: pipeline.log_query_history(
+                user_id=user_id,
+                query=question,
+                answer=result.get('answer', ''),
+                references=result.get('references', [])
+            )
+        )
+        
+        # RAG 파이프라인 결과 확인 (에러 여부 확인)
+        if result.get('status') == 'error':
+            return {
+                "status": "error",
+                "question": question,
+                "detail": result.get('message', result.get('detail', '알 수 없는 에러')),
+                "filters": {
+                    "user_id": user_id,
+                    "cat_id": cat_id
+                }
+            }
+        
+        return {
+            "status": "success",
+            "question": question,
+            "answer": result.get('answer', '답변을 생성할 수 없습니다.'),
+            "references": result.get('references', []),
+            "filters": {
+                "user_id": user_id,
+                "cat_id": cat_id
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+# ===================== Health Check =====================
+
+@app.get("/health-llm/")
+async def health_llm():
+    """서버 상태 확인"""
+    try:
+        ollama_status = check_ollama_server()
+        return {
+            "status": "healthy" if ollama_status["available"] else "degraded",
+            "message": "Server is running",
+            "models": ollama_status.get("models", []),
+            "current_model": CURRENT_MODEL,
+            "server_url": LLM_CONFIG.get("base_url", "http://localhost:11434")
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "message": str(e)
+        }
