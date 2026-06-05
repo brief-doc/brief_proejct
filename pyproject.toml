@@ -1,0 +1,18 @@
+[tool.ruff]
+# 검사할 자격이 있는 기본 파이썬 버전
+target-version = "py310"
+
+# 한 줄의 최대 글자 수 (기본 88자)
+line-length = 88
+
+[tool.ruff.lint]
+# 사용할 규칙 세트 (E: 문법 오류, F: 파이썬 오류 감지)
+select = ["E", "F", "I"]
+ignore = []
+
+[tool.ruff.format]
+# 파이썬 표준인 쌍따옴표(") 사용
+quote-style = "double"
+
+# 들여쓰기는 탭 대신 스페이스 4칸 사용 (파이썬 공식 표준)
+indent-style = "space"

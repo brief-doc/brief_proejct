@@ -1,0 +1,37 @@
+
+
+# 
+
+
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+.DS_Store
+Thumbs.db
+>>>>>>> 4f6b36a7ca96fed1e8afb05a22c8450035956816
+
+# 개인 편집기 설정 (필요시 제외)
+.vscode/
+
+# 
+node_modules/
+package-lock.json
+package.json
