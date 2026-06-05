@@ -13,15 +13,15 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
 
-notify-docker:
-  needs: build
-  if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-  runs-on: ubuntu-latest
-  steps:
-    - name: Trigger submodule bump
-      run: |
-        curl -sf -X POST \
-          -H "Authorization: Bearer ${{ secrets.DISPATCH_TOKEN }}" \
-          -H "Accept: application/vnd.github+json" \
-          https://api.github.com/repos/brief-doc/docker/dispatches \
-          -d '{"event_type":"submodule-update","client_payload":{"submodule":"backend"}}'
+  notify-docker:
+    needs: lint
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger submodule bump
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${{ secrets.DISPATCH_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/brief-doc/docker/dispatches \
+            -d '{"event_type":"submodule-update","client_payload":{"submodule":"backend"}}'
