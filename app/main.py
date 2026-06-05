@@ -1,6 +1,6 @@
 import os
 from fastapi import FastAPI
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 import redis
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,11 +14,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# PostgreSQL 연결
-engine = create_engine(os.environ["DATABASE_URL"])
+from app.db.database import engine
 
 # Redis 연결
 redis_client = redis.from_url(os.environ["REDIS_URL"])
+
+# import routers after app is created to avoid circular imports
+from app.api.routes.auth import router as auth_router
+
+# include API routers
+app.include_router(auth_router)
 
 
 @app.get("/")

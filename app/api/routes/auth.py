@@ -139,10 +139,15 @@ def login(
     db: Session = Depends(get_db)
 ):
     user = get_user_by_email(db, login_data.email)
-    if not user or not verify_password(login_data.password, user.user_password):
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="이메일 또는 비밀번호가 올바르지 않습니다"
+            detail="이메일 없다"
+        )
+    if not verify_password(login_data.password, user.user_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="미이메일 또는 비밀번호가 올바르지 않습니다"
         )
 
     session_token = secrets.token_urlsafe(32)
