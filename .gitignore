@@ -1,15 +1,6 @@
-#전체파일
-/*
 
-!.gitignore
-!.github/
-!schema/
-!README.md
-!requirements.txt
-!app/
-!Dockerfile
-!.dockerignore
-!pyproject.toml
+
+# 
 
 
 
@@ -41,3 +32,6 @@ Thumbs.db
 .vscode/
 
 # 
+node_modules/
+package-lock.json
+package.json
