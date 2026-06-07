@@ -36,6 +36,7 @@ class UserResponse(BaseModel):
     id: int # ID는 Integer입니다.
     email: str
     name: str # username 대신 name 사용
+    user_rank: int
     class Config:
         from_attributes = True
 
@@ -59,10 +60,8 @@ def validate_access_and_session(request: Request, db: Session):
         return None
 
     try:
-        payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        if payload.get("type") != "access" or payload.get("sub") is None:
-            return None
-    except JWTError:
+        payload = verify_token(access_token, token_type="access")
+    except HTTPException:
         return None
 
     user = get_user_by_session_token(db, session_token)
@@ -77,7 +76,14 @@ def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
     print("get_me 호출됨")
     user = validate_access_and_session(request, db)
     if user:
-        return {"authenticated": True, "id": user.user_id, "email": user.user_email, "name": user.user_name}
+        return {
+            "authenticated": True,
+            "id": user.user_id,
+            "email": user.user_email,
+            "name": user.user_name,
+            "user_name": user.user_name,
+            "user_rank": user.user_rank,
+        }
 
     session_token = request.cookies.get("session_token")
     refresh_token_cookie = request.cookies.get("refresh_token")
@@ -86,9 +92,9 @@ def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
 
     user = get_user_by_session_token(db, session_token)
     if not user:
-        response.delete_cookie(key="access_token", httponly=True, samesite="lax")
-        response.delete_cookie(key="refresh_token", httponly=True, samesite="lax")
-        response.delete_cookie(key="session_token", httponly=True, samesite="lax")
+        response.delete_cookie(key="access_token", httponly=True, secure=True, samesite="none")
+        response.delete_cookie(key="refresh_token", httponly=True, secure=True, samesite="none")
+        response.delete_cookie(key="session_token", httponly=True, secure=True, samesite="none")
         return {"authenticated": False}
 
     try:
@@ -101,16 +107,17 @@ def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
             key="access_token",
             value=new_access_token,
             httponly=True,
-            secure=False,
-            samesite="lax",
+            secure=True,
+            samesite="none",
             max_age=60 * 30,
         )
-        return {"authenticated": True, "id": user.user_id, "email": user.user_email, "name": user.user_name}
+        return {"authenticated": True, "id": user.user_id, "email": user.user_email, "name": user.user_name, "user_name": user.user_name, "user_rank": user.user_rank}
     except HTTPException:
-        response.delete_cookie(key="access_token", httponly=True, samesite="lax")
-        response.delete_cookie(key="refresh_token", httponly=True, samesite="lax")
-        response.delete_cookie(key="session_token", httponly=True, samesite="lax")
-        return {"authenticated": False}
+            response.delete_cookie(key="access_token", httponly=True, secure=True, samesite="none")
+            response.delete_cookie(key="refresh_token", httponly=True, secure=True, samesite="none")
+            response.delete_cookie(key="session_token", httponly=True, secure=True, samesite="none")
+            return {"authenticated": False}
+            return {"authenticated": False}
 
 
 @router.post("/register", response_model=UserResponse)
@@ -125,6 +132,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         "id": new_user.user_id,
         "email": new_user.user_email,
         "name": new_user.user_name,
+        "user_name": new_user.user_name,
+        "user_rank": new_user.user_rank,
     }
 
 class LoginRequest(BaseModel):
@@ -168,28 +177,35 @@ def login(
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=False,       # 개발환경은 HTTP이므로 False
-        samesite="lax",
+        secure=True,
+        samesite="none",
         max_age=60 * 30,
     )
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=False,       # 개발환경은 HTTP이므로 False
-        samesite="lax",
+        secure=True,
+        samesite="none",
         max_age=60 * 60 * 24 * settings.REFRESH_TOKEN_EXPIRE_DAYS,
     )
     response.set_cookie(
         key="session_token",
         value=session_token,
         httponly=True,
-        secure=False,
-        samesite="lax",
+        secure=True,
+        samesite="none",
         max_age=60 * 60 * 24 * settings.REFRESH_TOKEN_EXPIRE_DAYS,
     )
 
-    return {"message": "로그인 성공"}
+    return {
+        "message": "로그인 성공",
+        "id": user.user_id,
+        "email": user.user_email,
+        "name": user.user_name,
+        "user_name": user.user_name,
+        "user_rank": user.user_rank,
+    }
 
 @router.post("/refresh", response_model=Token)
 def refresh_token(
@@ -217,16 +233,16 @@ def refresh_token(
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=False,
-        samesite="lax",
+        secure=True,
+        samesite="none",
         max_age=60 * settings.ACCESS_TOKEN_EXPIRE_MINUTES,
     )
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=False,
-        samesite="lax",
+        secure=True,
+        samesite="none",
         max_age=60 * 60 * 24 * settings.REFRESH_TOKEN_EXPIRE_DAYS,
     )
 
@@ -257,9 +273,9 @@ def revoke_session(session_id: int, request: Request, response: Response, db: Se
 
     deactivate_session(db, session)
     if request.cookies.get("session_token") == session.session_token:
-        response.delete_cookie(key="access_token", httponly=True, samesite="lax")
-        response.delete_cookie(key="refresh_token", httponly=True, samesite="lax")
-        response.delete_cookie(key="session_token", httponly=True, samesite="lax")
+        response.delete_cookie(key="access_token", httponly=True, secure=True, samesite="none")
+        response.delete_cookie(key="refresh_token", httponly=True, secure=True, samesite="none")
+        response.delete_cookie(key="session_token", httponly=True, secure=True, samesite="none")
 
     return {"message": "세션이 종료되었습니다"}
 
@@ -272,9 +288,9 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
         if session:
             deactivate_session(db, session)
 
-    response.delete_cookie(key="access_token", httponly=True, samesite="lax")
-    response.delete_cookie(key="refresh_token", httponly=True, samesite="lax")
-    response.delete_cookie(key="session_token", httponly=True, samesite="lax")
+    response.delete_cookie(key="access_token", httponly=True, secure=True, samesite="none")
+    response.delete_cookie(key="refresh_token", httponly=True, secure=True, samesite="none")
+    response.delete_cookie(key="session_token", httponly=True, secure=True, samesite="none")
     return {"message": "로그아웃 성공"}
 
 
