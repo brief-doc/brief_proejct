@@ -2,11 +2,11 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from app.core.config import settings          # ← app.core.config → config 로 변경
+from app.core.config import settings
 from app.db.database import get_db
 
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
@@ -48,16 +48,29 @@ def verify_token(token: str, token_type: str = "access") -> dict:
     except JWTError:
         raise credentials_exception
 
+def get_access_token_from_request(request: Request) -> Optional[str]:
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        return auth_header.split(" ", 1)[1].strip()
+    return request.cookies.get("access_token")
+
+
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    from crud.user import get_user   # ← app.crud.user → crud.user 로 변경
+    from crud.user import get_user
+    token = get_access_token_from_request(request)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="토큰이 없습니다",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     payload = verify_token(token, token_type="access")
     user_id: int = int(payload.get("sub"))
     user = get_user(db, user_id)
     if user is None:
-        print("유저를 찾을 수 없습니다")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유저를 찾을 수 없습니다")
     return user
 
