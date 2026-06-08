@@ -2,6 +2,10 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
@@ -9,11 +13,6 @@ from app.core.security import (
     verify_password,
     verify_token,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from jose import JWTError, jwt
-from pydantic import BaseModel, EmailStr
-from sqlalchemy.orm import Session
-
 from app.db.database import get_db
 from app.schemas.user import RefreshTokenRequest, Token, UserCreate
 from app.services.auth_service import (
@@ -33,8 +32,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 class UserResponse(BaseModel):
     id: int  # ID는 Integer입니다.
     email: str
-    name: str # username 대신 name 사용
+    name: str  # username 대신 name 사용
     user_rank: int
+
     class Config:
         from_attributes = True
 
@@ -112,13 +112,20 @@ def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
             samesite="none",
             max_age=60 * 30,
         )
-        return {"authenticated": True, "id": user.user_id, "email": user.user_email, "name": user.user_name, "user_name": user.user_name, "user_rank": user.user_rank}
+        return {
+            "authenticated": True,
+            "id": user.user_id,
+            "email": user.user_email,
+            "name": user.user_name,
+            "user_name": user.user_name,
+            "user_rank": user.user_rank,
+        }
     except HTTPException:
-            response.delete_cookie(key="access_token", httponly=True, secure=True, samesite="none")
-            response.delete_cookie(key="refresh_token", httponly=True, secure=True, samesite="none")
-            response.delete_cookie(key="session_token", httponly=True, secure=True, samesite="none")
-            return {"authenticated": False}
-            return {"authenticated": False}
+        response.delete_cookie(key="access_token", httponly=True, secure=True, samesite="none")
+        response.delete_cookie(key="refresh_token", httponly=True, secure=True, samesite="none")
+        response.delete_cookie(key="session_token", httponly=True, secure=True, samesite="none")
+        return {"authenticated": False}
+        return {"authenticated": False}
 
 
 @router.post("/register", response_model=UserResponse)
@@ -151,14 +158,11 @@ def login(
 ):
     user = get_user_by_email(db, login_data.email)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="이메일 없다"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="이메일 없다")
     if not verify_password(login_data.password, user.user_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="이메일 또는 비밀번호가 올바르지 않습니다"
+            detail="이메일 또는 비밀번호가 올바르지 않습니다",
         )
 
     session_token = secrets.token_urlsafe(32)
