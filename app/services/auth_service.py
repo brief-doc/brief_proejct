@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 
-from app.core.security import hash_password
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password
 from app.db.models import User, UserSession
 from app.schemas.user import UserCreate
 
