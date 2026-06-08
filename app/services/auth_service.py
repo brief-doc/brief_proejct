@@ -1,23 +1,31 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+
+from app.core.security import hash_password
 from sqlalchemy.orm import Session
+
 from app.db.models import User, UserSession
 from app.schemas.user import UserCreate
-from app.core.security import hash_password
+
 
 def get_user(db: Session, id: int):
     return db.query(User).filter(User.user_id == id).first()
 
+
 def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.user_email == email).first()
+
 
 def get_users(db: Session, skip: int = 0, limit: int = 100):
     return db.query(User).offset(skip).limit(limit).all()
 
+
 def get_user_session_by_token(db: Session, session_token: str):
     return db.query(UserSession).filter(UserSession.session_token == session_token).first()
 
+
 def get_session_by_id(db: Session, session_id: int):
     return db.query(UserSession).filter(UserSession.session_id == session_id).first()
+
 
 def get_user_by_session_token(db: Session, session_token: str):
     session = get_user_session_by_token(db, session_token)
@@ -31,10 +39,19 @@ def get_user_by_session_token(db: Session, session_token: str):
         return None
     return get_user(db, session.user_id)
 
+
 def get_user_sessions(db: Session, user_id: int):
     return db.query(UserSession).filter(UserSession.user_id == user_id).all()
 
-def create_user_session(db: Session, user_id: int, session_token: str, expires_at: datetime, ip_address: str | None = None, user_agent: str | None = None):
+
+def create_user_session(
+    db: Session,
+    user_id: int,
+    session_token: str,
+    expires_at: datetime,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+):
     user_session = UserSession(
         user_id=user_id,
         session_token=session_token,
@@ -49,6 +66,7 @@ def create_user_session(db: Session, user_id: int, session_token: str, expires_a
     db.refresh(user_session)
     return user_session
 
+
 def deactivate_session(db: Session, session: UserSession):
     session.is_active = False
     db.commit()
@@ -61,12 +79,13 @@ def create_user(db: Session, user: UserCreate):
         user_password=hash_password(user.password),
         user_rank=1,
         user_name=user.name,
-        user_create=datetime.now()
+        user_create=datetime.now(),
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
+
 
 def delete_user(db: Session, id: int):
     db_user = get_user(db, id)

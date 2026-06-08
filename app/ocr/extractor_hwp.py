@@ -7,7 +7,7 @@ HWP / HWPX 추출기
 
 import cv2
 
-from app.OCR.utils import clean_text
+from app.ocr.utils import clean_text
 
 
 def process_hwp(file_path: str, ocr_reader=None) -> list[str]:
@@ -74,9 +74,7 @@ def process_hwp(file_path: str, ocr_reader=None) -> list[str]:
                     row_cells = [row_map[tr_idx][tc_idx] for tc_idx in sorted_cols]
                     md_rows.append("| " + " | ".join(row_cells) + " |")
                     if row_idx == 0:
-                        md_rows.append(
-                            "| " + " | ".join(["---"] * len(row_cells)) + " |"
-                        )
+                        md_rows.append("| " + " | ".join(["---"] * len(row_cells)) + " |")
                 if md_rows:
                     blocks.append("\n" + "\n".join(md_rows) + "\n\n")
 
@@ -97,17 +95,11 @@ def process_hwp(file_path: str, ocr_reader=None) -> list[str]:
                     img_bgr = cv2.convertScaleAbs(img_bgr, alpha=1.3, beta=10)
                     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
                     results = ocr_reader.readtext(img_rgb)
-                    lines = [
-                        t.strip()
-                        for (_, t, conf) in results
-                        if t.strip() and conf >= 0.4
-                    ]
+                    lines = [t.strip() for (_, t, conf) in results if t.strip() and conf >= 0.4]
                     if lines:
                         text = clean_text("\n".join(lines))
                         formatted = text.replace("\n", "\n> ")
-                        blocks.append(
-                            "\n> **[이미지 내 텍스트]**\n> " + formatted + "\n\n"
-                        )
+                        blocks.append("\n> **[이미지 내 텍스트]**\n> " + formatted + "\n\n")
                 except Exception as img_e:
                     print("  이미지 OCR 실패: " + str(img_e))
 

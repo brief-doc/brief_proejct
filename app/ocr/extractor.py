@@ -20,7 +20,7 @@
 import sys
 from pathlib import Path
 
-from app.OCR.utils import SUPPORTED_EXTENSIONS
+from app.ocr.utils import SUPPORTED_EXTENSIONS
 
 
 def process_document(file_path: str, pages: list = None) -> str:

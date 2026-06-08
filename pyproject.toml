@@ -3,7 +3,7 @@
 target-version = "py310"
 
 # 한 줄의 최대 글자 수 (기본 88자)
-line-length = 88
+line-length = 100
 
 [tool.ruff.lint]
 # 사용할 규칙 세트 (E: 문법 오류, F: 파이썬 오류 감지)

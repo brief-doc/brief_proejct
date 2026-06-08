@@ -4,15 +4,15 @@
 - 공통 설정값
 """
 
-import gc
 import warnings
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # ── 공통 설정 ─────────────────────────────────────────────────────────────────
-BATCH_SIZE    = 5      # Docling 배치 크기 (RAM 부족 시 2~3으로 줄이기)
-OCR_ZOOM      = 2      # 크롭 이미지 확대 배율
-SAVE_CROPS    = False  # 크롭 이미지 저장 여부 (디버깅 시 True로)
-LLAMA_API_KEY = "llx-YOUR_API_KEY_HERE"   # ← LlamaParse API 키 입력
+BATCH_SIZE = 5  # Docling 배치 크기 (RAM 부족 시 2~3으로 줄이기)
+OCR_ZOOM = 2  # 크롭 이미지 확대 배율
+SAVE_CROPS = False  # 크롭 이미지 저장 여부 (디버깅 시 True로)
+LLAMA_API_KEY = "llx-YOUR_API_KEY_HERE"  # ← LlamaParse API 키 입력
 
 # 지원 확장자
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".hwp", ".hwpx"}

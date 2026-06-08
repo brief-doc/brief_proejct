@@ -13,7 +13,7 @@ import fitz
 import numpy as np
 import pypdfium2 as pdfium
 
-from app.OCR.utils import BATCH_SIZE, OCR_ZOOM, SAVE_CROPS, clean_text
+from app.ocr.utils import BATCH_SIZE, OCR_ZOOM, SAVE_CROPS, clean_text
 
 
 # ── pypdfium2: bbox 영역 텍스트 추출 ─────────────────────────────────────────
@@ -91,24 +91,16 @@ def run_ocr(ocr, pdf_doc, item, label: str) -> str | None:
         img_bgr = img_rgb = None
         gc.collect()
 
-        lines = [
-            text.strip() for (_, text, conf) in results if text.strip() and conf >= 0.4
-        ]
+        lines = [text.strip() for (_, text, conf) in results if text.strip() and conf >= 0.4]
         extracted = clean_text("\n".join(lines))
 
         if extracted.strip():
             type_name = "차트/그래프" if label == "CHART" else "이미지"
             formatted = extracted.strip().replace("\n", "\n> ")
             print(f"  Page {page_no} [{label}] OCR 성공!")
-            return (
-                f"\n> **[{type_name} 내 텍스트] (Page {page_no})**\n> {formatted}\n\n"
-            )
+            return f"\n> **[{type_name} 내 텍스트] (Page {page_no})**\n> {formatted}\n\n"
         else:
-            msg = (
-                f"{crop_filename}"
-                if SAVE_CROPS
-                else "SAVE_CROPS=True 로 설정하면 확인 가능"
-            )
+            msg = f"{crop_filename}" if SAVE_CROPS else "SAVE_CROPS=True 로 설정하면 확인 가능"
             print(f"  Page {page_no} [{label}] OCR 결과 없음 ({msg})")
             return None
 
@@ -127,9 +119,7 @@ def convert_pdf_batch(pdf_path: str, batch_pages: list):
     pipeline_options.do_ocr = False
 
     converter = DocumentConverter(
-        format_options={
-            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
-        }
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
     )
     result = converter.convert(
         pdf_path,
@@ -150,9 +140,7 @@ def process_pdf(pdf_path: str, page_filter: set = None) -> list[str]:
         batches = [sorted(page_filter)]
     else:
         all_pages = list(range(1, total_pages + 1))
-        batches = [
-            all_pages[i : i + BATCH_SIZE] for i in range(0, len(all_pages), BATCH_SIZE)
-        ]
+        batches = [all_pages[i : i + BATCH_SIZE] for i in range(0, len(all_pages), BATCH_SIZE)]
 
     for batch_idx, batch_pages in enumerate(batches):
         print(f"  배치 {batch_idx + 1}/{len(batches)}  페이지 {batch_pages}")

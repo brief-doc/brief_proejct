@@ -118,9 +118,7 @@ def save_to_vector_db(file_path: str, doc_id: int, user_id: int):
 
         # ingest.py의 ingest_pdf 함수 호출
         file_name = os.path.basename(file_path)
-        result = ingest_pdf(
-            file_path=file_path, doc_id=doc_id, user_id=user_id, doc_name=file_name
-        )
+        result = ingest_pdf(file_path=file_path, doc_id=doc_id, user_id=user_id, doc_name=file_name)
 
         return result
     except Exception as e:
@@ -165,7 +163,7 @@ async def upload_and_summarize(
         if not is_valid:
             try:
                 os.remove(temp_path)
-            except:
+            except Exception:
                 pass
             return {"status": "error", "detail": f"유효한 PDF 파일이 아닙니다: {msg}"}
 
@@ -220,9 +218,7 @@ async def upload_and_summarize(
 
         return {
             "status": "success",
-            "model_used": {
-                CURRENT_MODEL
-            },  # config.py에서 설정한 현재 모델명 (동적 반영)
+            "model_used": {CURRENT_MODEL},  # config.py에서 설정한 현재 모델명 (동적 반영)
             "doc_id": doc_id,
             "summary": summary.get("output_text", "요약을 생성할 수 없습니다."),
         }
@@ -317,7 +313,7 @@ async def batch_upload(
             if not is_valid:
                 try:
                     os.remove(file_path)
-                except:
+                except Exception:
                     pass
                 continue
 
@@ -325,9 +321,7 @@ async def batch_upload(
             loader = PyPDFLoader(file_path)
             documents = loader.load()
 
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000, chunk_overlap=200
-            )
+            splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             chunks = splitter.split_documents(documents)
 
             # 메타데이터 추가
@@ -337,9 +331,7 @@ async def batch_upload(
                 chunk.metadata["chunk_index"] = i
 
             total_chunks += len(chunks)
-            results.append(
-                {"file_name": file.filename, "doc_id": doc_id, "chunks": len(chunks)}
-            )
+            results.append({"file_name": file.filename, "doc_id": doc_id, "chunks": len(chunks)})
 
         return {"status": "success", "total_chunks": total_chunks, "results": results}
     except Exception as e:
@@ -454,9 +446,7 @@ async def query_documents(
             return {
                 "status": "error",
                 "question": question,
-                "detail": result.get(
-                    "message", result.get("detail", "알 수 없는 에러")
-                ),
+                "detail": result.get("message", result.get("detail", "알 수 없는 에러")),
                 "filters": {"user_id": user_id, "cat_id": cat_id},
             }
 

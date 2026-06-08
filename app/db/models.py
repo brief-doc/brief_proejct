@@ -1,15 +1,18 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Text, TIMESTAMP
-from sqlalchemy.orm import relationship
-from datetime import datetime, timezone, timedelta
-from app.db.database import Base
+from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import relationship
+
+from app.db.database import Base
 
 # 한국 시간 (KST) 설정
 KST = timezone(timedelta(hours=9))
 
+
 def get_now():
     # 한국 시간 (KST) 기준 현재 시간 반환
     return datetime.now(KST)
+
 
 class User(Base):
     __tablename__ = "users"
@@ -76,7 +79,7 @@ class Document(Base):
     file_type = Column(String)
     file_size = Column(String)
     cat_id = Column(Integer, ForeignKey("category.cat_id"))
-    content_full = Column(Text) 
+    content_full = Column(Text)
     content_sum = Column(Text)
     time_saved = Column(TIMESTAMP(timezone=True))
     time_updated = Column(TIMESTAMP(timezone=True))
@@ -93,16 +96,18 @@ class Job(Base):
 
     job_id = Column(Integer, primary_key=True, autoincrement=True)
     # 🛠️ ERD 구조 반영: timestamp with time zone으로 수정
-    job_start = Column(TIMESTAMP(timezone=True))  
+    job_start = Column(TIMESTAMP(timezone=True))
     job_finish = Column(TIMESTAMP(timezone=True))
-    
-    doc_id = Column(Integer, ForeignKey("documents.doc_id")) 
+
+    doc_id = Column(Integer, ForeignKey("documents.doc_id"))
     user_id = Column(Integer, ForeignKey("users.user_id"))
     job_type = Column(String)
     job_status = Column(String)
 
     user = relationship("User", back_populates="jobs")
     document = relationship("Document", back_populates="jobs")
+
+
 """
 파일원본
 

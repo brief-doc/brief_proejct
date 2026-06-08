@@ -4,7 +4,7 @@ DOC 추출기
 
 """
 
-from app.OCR.utils import LLAMA_API_KEY, clean_text
+from app.ocr.utils import LLAMA_API_KEY, clean_text
 
 
 def process_doc(file_path: str) -> list[str]:
@@ -47,9 +47,7 @@ def process_doc(file_path: str) -> list[str]:
             if documents:
                 doc = documents[0]
                 print(f"     type: {type(doc)}")
-                print(
-                    f"     attrs: {[a for a in dir(doc) if not a.startswith('_')][:15]}"
-                )
+                print(f"     attrs: {[a for a in dir(doc) if not a.startswith('_')][:15]}")
         return blocks
 
     except Exception as e:

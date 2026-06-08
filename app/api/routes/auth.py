@@ -1,39 +1,37 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Request, Response
-from jose import JWTError, jwt
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List
-from datetime import datetime, timedelta, timezone
 import secrets
-from app.core.config import settings 
-import os
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 
-from app.db.database import get_db
-from app.schemas.user import Token, UserCreate, RefreshTokenRequest
-from app.services.auth_service import (
-    get_user_by_email,
-    create_user,
-    create_user_session,
-    get_user_by_session_token,
-    get_user_session_by_token,
-    get_session_by_id,
-    get_user_sessions,
-    deactivate_session,
-)
+from app.core.config import settings
 from app.core.security import (
-    verify_password,
     create_access_token,
     create_refresh_token,
+    verify_password,
     verify_token,
-    get_current_active_user
+)
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from jose import JWTError, jwt
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db
+from app.schemas.user import RefreshTokenRequest, Token, UserCreate
+from app.services.auth_service import (
+    create_user,
+    create_user_session,
+    deactivate_session,
+    get_session_by_id,
+    get_user_by_email,
+    get_user_by_session_token,
+    get_user_session_by_token,
+    get_user_sessions,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-
 class UserResponse(BaseModel):
-    id: int # ID는 Integer입니다.
+    id: int  # ID는 Integer입니다.
     email: str
     name: str # username 대신 name 사용
     user_rank: int
@@ -52,7 +50,7 @@ class SessionResponse(BaseModel):
     class Config:
         from_attributes = True
 
-    
+
 def validate_access_and_session(request: Request, db: Session):
     access_token = request.cookies.get("access_token")
     session_token = request.cookies.get("session_token")
@@ -100,7 +98,10 @@ def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
     try:
         payload = verify_token(refresh_token_cookie, token_type="refresh")
         if str(payload.get("sub")) != str(user.user_id):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="토큰 정보가 일치하지 않습니다")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="토큰 정보가 일치하지 않습니다",
+            )
 
         new_access_token = create_access_token(data={"sub": str(user.user_id)})
         response.set_cookie(
@@ -124,8 +125,7 @@ def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
 def register(user: UserCreate, db: Session = Depends(get_db)):
     if get_user_by_email(db, user.email):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미 존재하는 이메일입니다"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="이미 존재하는 이메일입니다"
         )
     new_user = create_user(db, user)
     return {
@@ -136,16 +136,18 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         "user_rank": new_user.user_rank,
     }
 
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
 
 @router.post("/login")
 def login(
     login_data: LoginRequest,
     request: Request,
     response: Response,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     user = get_user_by_email(db, login_data.email)
     if not user:
@@ -156,7 +158,7 @@ def login(
     if not verify_password(login_data.password, user.user_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="미이메일 또는 비밀번호가 올바르지 않습니다"
+            detail="이메일 또는 비밀번호가 올바르지 않습니다"
         )
 
     session_token = secrets.token_urlsafe(32)
@@ -207,6 +209,7 @@ def login(
         "user_rank": user.user_rank,
     }
 
+
 @router.post("/refresh", response_model=Token)
 def refresh_token(
     request: Request,
@@ -220,11 +223,17 @@ def refresh_token(
 
     user = get_user_by_session_token(db, session_token)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="세션이 만료되었거나 비활성화되었습니다")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="세션이 만료되었거나 비활성화되었습니다",
+        )
 
     payload = verify_token(refresh_data.refresh_token, token_type="refresh")
     if str(payload.get("sub")) != str(user.user_id):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="토큰 정보가 일치하지 않습니다")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="토큰 정보가 일치하지 않습니다",
+        )
 
     access_token = create_access_token(data={"sub": str(user.user_id)})
     refresh_token = create_refresh_token(data={"sub": str(user.user_id)})
@@ -248,6 +257,7 @@ def refresh_token(
 
     return Token(access_token=access_token, refresh_token=refresh_token)
 
+
 # @router.get("/me", response_model=UserResponse)
 # def get_me(current_user=Depends(get_current_active_user)):
 #     return current_user
@@ -262,7 +272,9 @@ def get_sessions(request: Request, db: Session = Depends(get_db)):
 
 
 @router.delete("/sessions/{session_id}")
-def revoke_session(session_id: int, request: Request, response: Response, db: Session = Depends(get_db)):
+def revoke_session(
+    session_id: int, request: Request, response: Response, db: Session = Depends(get_db)
+):
     user = validate_access_and_session(request, db)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다")
@@ -292,5 +304,3 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     response.delete_cookie(key="refresh_token", httponly=True, secure=True, samesite="none")
     response.delete_cookie(key="session_token", httponly=True, secure=True, samesite="none")
     return {"message": "로그아웃 성공"}
-
-
