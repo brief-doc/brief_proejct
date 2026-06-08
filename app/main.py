@@ -1,3 +1,5 @@
+import os
+
 import redis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +24,7 @@ redis_client = redis.from_url(os.environ["REDIS_URL"])
 
 # include API routers
 app.include_router(auth_router)
+app.include_router(docuemnt_router)
 
 
 @app.get("/")
