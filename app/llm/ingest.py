@@ -1,191 +1,189 @@
-"""
-적재/벡터화 모듈 (ingest.py)
-=================================
-역할: 문서를 청크로 쪼개고 → 벡터화 → Chroma에 저장 (한 번만 실행)
+"""문서 저장 통합 모듈 — PDF / 마크다운 청킹 → ChromaDB 저장"""
 
-특징:
-1. 문서를 1,000자 청크로 분할
-2. 페이지별 청킹 (페이지 경계 보존)
-3. bge-m3로 임베딩
-4. 메타데이터: {문서명, 페이지, 청크 ID}
-5. ChromaDB에 저장
-
-사용:
-    python ingest.py <pdf_파일_경로> <doc_id> <user_id> [--doc-name "문서명"]
-
-예시:
-    python ingest.py ./pdf_files/계약서.pdf 1 100 --doc-name "2024년 계약서"
-"""
-
-import argparse
+import glob
 import os
-import sys
-from typing import Dict, Tuple
+from datetime import datetime
 
+import chromadb
+import requests
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# 설정 import
-try:
-    from .config import CHROMA_DB_PATH, EMBEDDING_CONFIG
-except ImportError:
-    print("경고: config.py를 찾을 수 없습니다. 기본값을 사용합니다.")
-    CHROMA_DB_PATH = "./chroma_pdf_db"
-    EMBEDDING_CONFIG = {"model_name": "BAAI/bge-m3", "device": "cpu"}
+from .config import CHROMA_DB_PATH, EMBEDDING_CONFIG, LLM_CONFIG
+
+_SPLITTER = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+_MD_SPLITTER = RecursiveCharacterTextSplitter(
+    chunk_size=500, chunk_overlap=50, separators=["\n\n", "\n", "。", "，", ""]
+)
+_OLLAMA_URL = LLM_CONFIG.get("base_url", "http://localhost:11434")
+_MODEL = LLM_CONFIG.get("model", "gemma3n:e2b")
 
 
-def is_valid_pdf(file_path: str) -> Tuple[bool, str]:
-    """PDF 파일 유효성 검증"""
-    if not file_path.lower().endswith(".pdf"):
-        return False, "파일 확장자가 .pdf가 아닙니다"
-
-    try:
-        if not os.path.exists(file_path):
-            return False, "파일을 찾을 수 없습니다"
-
-        if os.path.getsize(file_path) == 0:
-            return False, "파일이 비어있습니다"
-
-        loader = PyPDFLoader(file_path)
-        test_docs = loader.load()
-
-        if not test_docs:
-            return False, "PDF에서 텍스트를 추출할 수 없습니다"
-
-        return True, "OK"
-    except Exception as e:
-        return False, f"PDF 로드 실패: {str(e)[:100]}"
+# ── 임베딩 모델 싱글톤 (최초 1회만 로드) ──────────────────────────────────────
+# _embeddings() 를 매번 호출할 때마다 새 모델을 생성하면 BGE-M3(570MB) 를
+# 호출마다 다시 로드하게 되어 수십 초가 낭비됩니다.
+# 모듈 레벨 싱글톤으로 관리하여 서버 수명 동안 한 번만 로드합니다.
+_EMBEDDINGS_INSTANCE: HuggingFaceEmbeddings | None = None
 
 
-def ingest_pdf(file_path: str, doc_id: int, user_id: int, doc_name: str = None) -> Dict:
-    """
-    PDF 문서를 벡터화하여 ChromaDB에 저장
-
-    Args:
-        file_path: PDF 파일 경로
-        doc_id: 문서 ID
-        user_id: 사용자 ID
-        doc_name: 커스텀 문서명 (None이면 파일명 사용)
-
-    Returns:
-        dict: {
-            "status": "success" or "error",
-            "file_name": str,
-            "total_chunks": int,
-            "total_pages": int,
-            "detail": str
-        }
-    """
-    print(f"\n{'=' * 60}")
-    print("[벡터화 시작]")
-    print(f"{'=' * 60}")
-    print(f"파일: {file_path}")
-    print(f"doc_id: {doc_id}, user_id: {user_id}")
-
-    # 1단계: PDF 검증
-    print("\n[1단계] PDF 파일 검증 중...")
-    is_valid, msg = is_valid_pdf(file_path)
-    if not is_valid:
-        print(f"❌ 검증 실패: {msg}")
-        return {"status": "error", "detail": f"유효한 PDF 파일이 아닙니다: {msg}"}
-    print("✓ PDF 검증 완료")
-
-    # 파일명 결정
-    file_name = doc_name if doc_name else os.path.basename(file_path)
-    print(f"  → 문서명: {file_name}")
-
-    # 2단계: PDF 로드
-    print("\n[2단계] PDF 로드 중...")
-    try:
-        loader = PyPDFLoader(file_path)
-        documents = loader.load()
-        total_pages = len(documents)
-        print(f"✓ PDF 로드 완료 (총 {total_pages}페이지)")
-    except Exception as e:
-        print(f"❌ PDF 로드 실패: {str(e)[:100]}")
-        return {"status": "error", "detail": f"PDF 로드 오류: {str(e)[:100]}"}
-
-    # 3단계: 페이지별 청킹
-    print("\n[3단계] 페이지별 청킹 중...")
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-
-    all_chunks = []
-    for page_idx, doc in enumerate(documents):
-        # 각 페이지 내에서만 청킹 (페이지 경계 보존)
-        page_chunks = splitter.split_documents([doc])
-
-        for chunk_idx, chunk in enumerate(page_chunks):
-            # 메타데이터 추가
-            chunk.metadata["doc_id"] = doc_id
-            chunk.metadata["user_id"] = user_id
-            chunk.metadata["file_name"] = file_name
-            chunk.metadata["page_num"] = page_idx + 1  # 1부터 시작
-            chunk.metadata["chunk_id"] = f"{doc_id}_p{page_idx + 1}_c{chunk_idx}"
-
-            all_chunks.append(chunk)
-
-    total_chunks = len(all_chunks)
-    print(f"✓ 청킹 완료 (총 {total_chunks}개 청크)")
-
-    # 청크별 통계
-    chunks_per_page = {}
-    for chunk in all_chunks:
-        page = chunk.metadata["page_num"]
-        chunks_per_page[page] = chunks_per_page.get(page, 0) + 1
-
-    print("  → 페이지별 청크 분포:")
-    for page in sorted(chunks_per_page.keys())[:5]:  # 처음 5개 페이지만 표시
-        print(f"     페이지 {page}: {chunks_per_page[page]}개 청크")
-    if len(chunks_per_page) > 5:
-        print(f"     ... (외 {len(chunks_per_page) - 5}페이지)")
-
-    # 4단계: 임베딩 모델 로드
-    print("\n[4단계] 임베딩 모델 로드 중...")
-    try:
-        embeddings = HuggingFaceEmbeddings(
-            model_name=EMBEDDING_CONFIG.get("model_name", "BAAI/bge-m3"),
+def _embeddings() -> HuggingFaceEmbeddings:
+    global _EMBEDDINGS_INSTANCE
+    if _EMBEDDINGS_INSTANCE is None:
+        print(f"[ingest] 임베딩 모델 최초 로드: {EMBEDDING_CONFIG['model_name']}")
+        _EMBEDDINGS_INSTANCE = HuggingFaceEmbeddings(
+            model_name=EMBEDDING_CONFIG["model_name"],
             model_kwargs={"device": EMBEDDING_CONFIG.get("device", "cpu")},
             encode_kwargs={"normalize_embeddings": True},
         )
-        print(f"✓ 모델 로드 완료: {EMBEDDING_CONFIG.get('model_name', 'BAAI/bge-m3')}")
-    except Exception as e:
-        print(f"❌ 모델 로드 실패: {str(e)[:100]}")
-        return {"status": "error", "detail": f"임베딩 모델 로드 실패: {str(e)[:100]}"}
+        print("[ingest] 임베딩 모델 로드 완료 (이후 재사용)")
+    return _EMBEDDINGS_INSTANCE
 
-    # 5단계: ChromaDB에 저장
-    print("\n[5단계] ChromaDB에 벡터 저장 중...")
+
+from .config import COLLECTION_NAME  # noqa: E402  retriever 와 동일 컬렉션 사용
+
+
+def _chroma_vs(collection: str | None = None):
+    """retriever.py 와 동일한 COLLECTION_NAME 을 기본값으로 사용"""
+    col = collection or COLLECTION_NAME
+    return Chroma(
+        persist_directory=CHROMA_DB_PATH, embedding_function=_embeddings(), collection_name=col
+    )
+
+
+def _qa_collection():
+    """COLLECTION_NAME 컬렉션 반환 — 없으면 자동 생성"""
+    client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
     try:
-        os.makedirs(CHROMA_DB_PATH, exist_ok=True)
+        return client.get_collection(COLLECTION_NAME)
+    except Exception:
+        return client.create_collection(COLLECTION_NAME)
 
-        Chroma.from_documents(
-            documents=all_chunks, embedding=embeddings, persist_directory=CHROMA_DB_PATH
-        )
 
-        print("✓ 벡터 저장 완료")
-        print(f"  → 저장 위치: {CHROMA_DB_PATH}")
+# ── PDF 저장 ──────────────────────────────────────────────────────────────────
+def ingest_pdf(
+    file_path: str, doc_id: int, user_id: int, doc_name: str = None, category: str = "기타"
+) -> dict:
+    """
+    PDF를 청킹하여 ChromaDB에 저장합니다.
+
+    Args:
+        file_path: PDF 파일 경로
+        doc_id:    문서 고유 ID
+        user_id:   업로드한 사용자 ID
+        doc_name:  문서 표시 이름 (미지정 시 파일명 사용)
+        category:  문서 카테고리 (법령·조례 / 가이드라인·지침 / 공모·사업 /
+                   감사 / 내부 규정 / 기타)
+    """
+    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+        return {"status": "error", "detail": "파일이 없거나 비어 있습니다"}
+    try:
+        documents = PyPDFLoader(file_path).load()
     except Exception as e:
-        print(f"❌ 벡터 저장 실패: {str(e)[:100]}")
-        return {"status": "error", "detail": f"벡터 저장 실패: {str(e)[:100]}"}
+        return {"status": "error", "detail": f"PDF 로드 실패: {e}"}
 
-    # 완료
-    print(f"\n{'=' * 60}")
-    print("✓ 벡터화 완료!")
-    print(f"{'=' * 60}")
-    print(f"문서명: {file_name}")
-    print(f"총 페이지: {total_pages}")
-    print(f"총 청크: {total_chunks}")
-    print(f"평균 청크/페이지: {total_chunks / total_pages:.1f}")
-    print(f"{'=' * 60}\n")
-
+    name = doc_name or os.path.basename(file_path)
+    chunks = []
+    for pi, doc in enumerate(documents):
+        for ci, chunk in enumerate(_SPLITTER.split_documents([doc])):
+            chunk.metadata.update(
+                {
+                    "doc_id": doc_id,
+                    "user_id": user_id,
+                    "file_name": name,
+                    "page_num": pi + 1,
+                    "chunk_id": f"{doc_id}_p{pi + 1}_c{ci}",
+                    "category": category,  # ← 카테고리 메타 추가
+                }
+            )
+            chunks.append(chunk)
+    try:
+        # retriever 와 동일 컬렉션(COLLECTION_NAME)에 저장
+        Chroma.from_documents(
+            chunks,
+            _embeddings(),
+            persist_directory=CHROMA_DB_PATH,
+            collection_name=COLLECTION_NAME,
+        )
+    except Exception as e:
+        return {"status": "error", "detail": f"벡터 저장 실패: {e}"}
     return {
         "status": "success",
-        "file_name": file_name,
-        "total_chunks": total_chunks,
-        "total_pages": total_pages,
-        "detail": f"{file_name} 문서가 {total_chunks}개 청크로 벡터화되어 저장되었습니다.",
+        "file_name": name,
+        "category": category,
+        "total_chunks": len(chunks),
+        "total_pages": len(documents),
     }
+
+
+# ── PDF 배치 저장 ─────────────────────────────────────────────────────────────
+def batch_ingest_pdfs(
+    pdf_folder: str = "./pdf_files", start_doc_id: int = 0, user_id: int = 1
+) -> dict:
+    files = glob.glob(os.path.join(pdf_folder, "*.pdf"))
+    if not files:
+        return {"status": "error", "detail": f"PDF 없음: {pdf_folder}"}
+
+    vs = _chroma_vs()
+    results, total = [], 0
+    for idx, path in enumerate(files):
+        name = os.path.basename(path)
+        doc_id = start_doc_id + idx
+        try:
+            docs = PyPDFLoader(path).load()
+            chunks = _SPLITTER.split_documents(docs)
+            for i, c in enumerate(chunks):
+                c.metadata.update(
+                    {
+                        "doc_id": doc_id,
+                        "user_id": user_id,
+                        "batch_processed_at": datetime.now().isoformat(),
+                    }
+                )
+            vs.add_documents(chunks)
+            total += len(chunks)
+            results.append({"file": name, "chunks": len(chunks), "status": "success"})
+        except Exception as e:
+            results.append({"file": name, "chunks": 0, "status": "error", "detail": str(e)})
+    return {"status": "success", "total_chunks": total, "results": results}
+
+
+# ── 마크다운 청킹 ─────────────────────────────────────────────────────────────
+def _chunk_by_sections(content: str) -> list[dict]:
+    chunks, cur, section = [], [], "본문"
+    for line in content.split("\n"):
+        if line.startswith("#"):
+            if cur:
+                text = "\n".join(cur).strip()
+                if len(text) > 10:
+                    chunks.append({"section": section, "content": text})
+            section = line.lstrip("#").strip()
+            cur = [line]
+        else:
+            cur.append(line)
+    if cur:
+        text = "\n".join(cur).strip()
+        if len(text) > 10:
+            chunks.append({"section": section, "content": text})
+    return chunks
+
+
+def _summarize(text: str) -> str:
+    try:
+        r = requests.post(
+            f"{_OLLAMA_URL}/api/generate",
+            json={
+                "model": _MODEL,
+                "stream": False,
+                "prompt": f"200자 이내 요약:\n{text[:800]}\n요약:",
+                "temperature": 0.3,
+            },
+            timeout=60,
+        )
+        return r.json().get("response", "").strip()[:200] if r.status_code == 200 else "[요약 실패]"
+    except Exception:
+        return "[요약 실패]"
 
 
 def ingest_markdown(
@@ -195,102 +193,73 @@ def ingest_markdown(
     doc_name: str = "마크다운 문서",
     chunking_method: str = "sections",
     enable_summary: bool = True,
-) -> Dict:
+    category: str = "기타",
+) -> dict:
     """
-    마크다운 문서를 청킹 → 요약 → ChromaDB에 저장
+    마크다운 문서를 청킹하여 ChromaDB qa_collection에 저장합니다.
 
     Args:
-        markdown_content: 마크다운 텍스트 내용
-        doc_id: 문서 ID
-        user_id: 사용자 ID
-        doc_name: 문서명
-        chunking_method: 청킹 방식 ("sections", "size")
-        enable_summary: 요약 생성 여부
-
-    Returns:
-        dict: {
-            "status": "success" or "error",
-            "total_chunks": int,
-            "doc_name": str,
-            "detail": str
-        }
+        category: 문서 카테고리 (법령·조례 / 가이드라인·지침 / 공모·사업 /
+                  감사 / 내부 규정 / 기타)
     """
+    chunks = (
+        _chunk_by_sections(markdown_content)
+        if chunking_method == "sections"
+        else [
+            {"section": "N/A", "content": c.strip()}
+            for c in _MD_SPLITTER.split_text(markdown_content)
+            if len(c.strip()) > 10
+        ]
+    )
+    if not chunks:
+        return {"status": "error", "detail": "청킹 결과 없음"}
+    if enable_summary:
+        for c in chunks:
+            c["summary"] = _summarize(c["content"])
     try:
-        from .markdown_processor import MarkdownProcessor
-    except ImportError:
-        return {
-            "status": "error",
-            "detail": "markdown_processor 모듈을 찾을 수 없습니다",
-        }
-
-    print(f"\n{'=' * 60}")
-    print("[마크다운 처리 시작]")
-    print(f"{'=' * 60}")
-    print(f"문서명: {doc_name}")
-    print(f"크기: {len(markdown_content)} 문자")
-    print(f"doc_id: {doc_id}, user_id: {user_id}")
-
-    # 마크다운 처리기 초기화
-    processor = MarkdownProcessor()
-
-    # 마크다운 처리
-    try:
-        result = processor.process_markdown(
-            markdown_content=markdown_content,
-            doc_id=doc_id,
-            user_id=user_id,
-            doc_name=doc_name,
-            chunking_method=chunking_method,
-            enable_summary=enable_summary,
-            save_to_db=True,
+        col = _qa_collection()
+        col.add(
+            ids=[f"{doc_id}_md_{i}" for i in range(len(chunks))],
+            documents=[c["content"] for c in chunks],
+            metadatas=[
+                {
+                    "doc_id": str(doc_id),
+                    "user_id": str(user_id),
+                    "doc_name": doc_name,
+                    "section": c.get("section", "N/A"),
+                    "category": category,
+                }
+                for c in chunks
+            ],
         )
-
-        print(f"\n{'=' * 60}")
-        print("✓ 마크다운 처리 완료!")
-        print(f"{'=' * 60}")
-
-        return result
-
     except Exception as e:
-        print(f"❌ 마크다운 처리 실패: {str(e)[:100]}")
-        return {"status": "error", "detail": f"마크다운 처리 실패: {str(e)[:100]}"}
+        return {"status": "error", "detail": str(e)}
+    return {"status": "success", "total_chunks": len(chunks), "category": category}
 
 
-def main():
-    """CLI 인터페이스"""
-    parser = argparse.ArgumentParser(
-        description="PDF 문서를 청크로 쪼개고 벡터화하여 ChromaDB에 저장",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-예시:
-  python ingest.py ./pdf_files/계약서.pdf 1 100
-  python ingest.py ./pdf_files/판결문.pdf 2 200 --doc-name "2024년 판결문"
-        """,
+# ── 하위 호환 ─────────────────────────────────────────────────────────────────
+def save_pdf_to_vector_db(file_path: str, doc_id: int, user_id: int) -> dict:
+    return ingest_pdf(file_path, doc_id, user_id)
+
+
+def save_markdown_to_vector_db(
+    markdown_content: str,
+    doc_id: int,
+    user_id: int,
+    doc_name: str = "마크다운 문서",
+    chunking_method: str = "sections",
+    enable_summary: bool = True,
+) -> dict:
+    return ingest_markdown(
+        markdown_content, doc_id, user_id, doc_name, chunking_method, enable_summary
     )
 
-    parser.add_argument("file_path", type=str, help="PDF 파일 경로")
-    parser.add_argument("doc_id", type=int, help="문서 ID")
-    parser.add_argument("user_id", type=int, help="사용자 ID")
-    parser.add_argument("--doc-name", type=str, default=None, help="커스텀 문서명 (기본값: 파일명)")
 
-    args = parser.parse_args()
-
-    # 벡터화 실행
-    result = ingest_pdf(
-        file_path=args.file_path,
-        doc_id=args.doc_id,
-        user_id=args.user_id,
-        doc_name=args.doc_name,
-    )
-
-    # 결과 출력
-    if result["status"] == "success":
-        print(f"✓ 성공: {result['detail']}")
-        sys.exit(0)
-    else:
-        print(f"❌ 실패: {result['detail']}")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+def batch_save_to_vector_db(files_data: list, start_doc_id: int, user_id: int) -> dict:
+    results, total = [], 0
+    for idx, f in enumerate(files_data):
+        path = f.get("file_path", "")
+        r = ingest_pdf(path, start_doc_id + idx, user_id, f.get("file_name"))
+        total += r.get("total_chunks", 0)
+        results.append({**r, "file_name": f.get("file_name", os.path.basename(path))})
+    return {"status": "success", "total_chunks": total, "results": results}
