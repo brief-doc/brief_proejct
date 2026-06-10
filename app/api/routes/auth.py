@@ -1,9 +1,11 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
+
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
@@ -14,6 +16,7 @@ from app.core.security import (
 from app.db.database import get_db
 from app.schemas.user import RefreshTokenRequest, Token, UserCreate
 from app.services.auth_service import (
+    change_password,
     create_user,
     create_user_session,
     deactivate_session,
@@ -22,6 +25,8 @@ from app.services.auth_service import (
     get_user_by_session_token,
     get_user_session_by_token,
     get_user_sessions,
+    get_users,
+    reset_user_password,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -32,6 +37,18 @@ class UserResponse(BaseModel):
     email: str
     name: str  # username 대신 name 사용
     user_rank: int
+
+    class Config:
+        from_attributes = True
+
+
+class UserListResponse(BaseModel):
+    id: int
+    email: str
+    name: str
+    user_rank: int
+    user_login: Optional[datetime] = None
+    user_create: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -115,7 +132,6 @@ def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
             "id": user.user_id,
             "email": user.user_email,
             "name": user.user_name,
-            "user_name": user.user_name,
             "user_rank": user.user_rank,
         }
     except HTTPException:
@@ -145,6 +161,14 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    email: str
+    userId: int
+    current_password: str
+    new_password: str
+    user_login: Optional[datetime] = None
 
 
 @router.post("/login")
@@ -212,6 +236,52 @@ def login(
         "user_rank": user.user_rank,
         "user_login": user.user_login,
     }
+
+
+@router.get("/users", response_model=List[UserListResponse])
+def list_users(request: Request, db: Session = Depends(get_db)):
+    current_user = validate_access_and_session(request, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다")
+
+    users = get_users(db)
+    return [
+        {
+            "id": user.user_id,
+            "email": user.user_email,
+            "name": user.user_name,
+            "user_rank": user.user_rank,
+            "user_login": user.user_login,
+            "user_create": user.user_create,
+        }
+        for user in users
+    ]
+
+
+@router.post("/users/{user_id}/reset-password")
+def reset_password(user_id: int, request: Request, db: Session = Depends(get_db)):
+    current_user = validate_access_and_session(request, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다")
+
+    updated_user = reset_user_password(db, user_id)
+    if not updated_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다")
+
+    return {"message": "암호가 초기화되었습니다"}
+
+
+@router.post("/users/{user_id}/force-logout")
+def force_logout_user(user_id: int, request: Request, response: Response, db: Session = Depends(get_db)):
+    current_user = validate_access_and_session(request, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다")
+
+    sessions = get_user_sessions(db, user_id)
+    for session in sessions:
+        deactivate_session(db, session)
+
+    return {"message": "사용자가 로그아웃되었습니다", "logged_out_sessions": len(sessions)}
 
 
 @router.post("/refresh", response_model=Token)
