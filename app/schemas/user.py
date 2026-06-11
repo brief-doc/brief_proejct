@@ -5,6 +5,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     name: str
+    roles: list[str] | None = None  # 미지정 시 기본 역할
 
 
 class Token(BaseModel):

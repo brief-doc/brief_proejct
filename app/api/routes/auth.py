@@ -32,11 +32,16 @@ from app.services.auth_service import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _role_names(user) -> List[str]:
+    """user_role 연결을 통해 이 유저가 가진 역할 이름 목록을 반환."""
+    return [ur.role.role_name for ur in user.user_roles]
+
+
 class UserResponse(BaseModel):
     id: int  # ID는 Integer입니다.
     email: str
     name: str  # username 대신 name 사용
-    user_rank: int
+    roles: List[str] = []  # user_rank(단일 등급) → roles(다중 역할)
 
     class Config:
         from_attributes = True
@@ -46,7 +51,7 @@ class UserListResponse(BaseModel):
     id: int
     email: str
     name: str
-    user_rank: int
+    roles: List[str] = []
     user_login: Optional[datetime] = None
     user_create: Optional[datetime] = None
 
@@ -95,7 +100,7 @@ def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
             "id": user.user_id,
             "email": user.user_email,
             "name": user.user_name,
-            "user_rank": user.user_rank,
+            "roles": _role_names(user),
         }
 
     session_token = request.cookies.get("session_token")
@@ -132,18 +137,21 @@ def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
             "id": user.user_id,
             "email": user.user_email,
             "name": user.user_name,
-            "user_rank": user.user_rank,
+            "roles": _role_names(user),
         }
     except HTTPException:
         response.delete_cookie(key="access_token", httponly=True, secure=True, samesite="none")
         response.delete_cookie(key="refresh_token", httponly=True, secure=True, samesite="none")
         response.delete_cookie(key="session_token", httponly=True, secure=True, samesite="none")
         return {"authenticated": False}
-        return {"authenticated": False}
 
 
 @router.post("/register", response_model=UserResponse)
 def register(user: UserCreate, db: Session = Depends(get_db)):
+    current = validate_access_and_session(request,db)
+    if not current or "관리자" not in _role_names(current):
+        raise HTTPException(status_code = 403, detail ="계정 생성 권한이 없습니다.")
+    
     if get_user_by_email(db, user.email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="이미 존재하는 이메일입니다"
@@ -153,8 +161,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         "id": new_user.user_id,
         "email": new_user.user_email,
         "name": new_user.user_name,
-        "user_name": new_user.user_name,
-        "user_rank": new_user.user_rank,
+        "roles": _role_names(new_user),  # 갓 가입한 유저는 보통 []
     }
 
 
@@ -186,8 +193,6 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="이메일 또는 비밀번호가 올바르지 않습니다",
         )
-    
-
 
     session_token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
@@ -233,7 +238,7 @@ def login(
         "id": user.user_id,
         "email": user.user_email,
         "name": user.user_name,
-        "user_rank": user.user_rank,
+        "roles": _role_names(user),
         "user_login": user.user_login,
     }
 
@@ -250,9 +255,9 @@ def list_users(request: Request, db: Session = Depends(get_db)):
             "id": user.user_id,
             "email": user.user_email,
             "name": user.user_name,
-            "user_rank": user.user_rank,
+            "roles": _role_names(user),
             "user_login": user.user_login,
-            "user_create": user.user_create,
+            "user_create": user.created_at,  # 모델 컬럼명이 created_at으로 변경됨
         }
         for user in users
     ]
@@ -332,11 +337,6 @@ def refresh_token(
     return Token(access_token=access_token, refresh_token=refresh_token)
 
 
-# @router.get("/me", response_model=UserResponse)
-# def get_me(current_user=Depends(get_current_active_user)):
-#     return current_user
-
-
 @router.get("/sessions", response_model=List[SessionResponse])
 def get_sessions(request: Request, db: Session = Depends(get_db)):
     user = validate_access_and_session(request, db)
@@ -374,32 +374,30 @@ def change_password_endpoint(
 ):
     """
     사용자 비밀번호 변경 및 user_login 시간 업데이트
-    
+
     - 현재 비밀번호 검증 후 새로운 비밀번호로 변경
     - user_login이 null인 경우, 현재 시간으로 설정
     - user_login이 이미 있는 경우, 새로운 로그인 시간으로 업데이트
     """
-    # 사용자 확인
     user = get_user_by_email(db, change_req.email)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다")
-    
+
     if user.user_id != change_req.userId:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="사용자 ID가 일치하지 않습니다")
-    
-    # 비밀번호 변경 (현재 비밀번호 검증 포함)
+
     login_time = change_req.user_login if change_req.user_login else datetime.now(timezone.utc)
     updated_user = change_password(
-        db, 
-        user.user_id, 
+        db,
+        user.user_id,
         change_req.current_password,
-        change_req.new_password, 
-        login_time
+        change_req.new_password,
+        login_time,
     )
-    
+
     if not updated_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="현재 비밀번호가 올바르지 않습니다")
-    
+
     return {
         "message": "비밀번호가 성공적으로 변경되었습니다",
         "id": updated_user.user_id,

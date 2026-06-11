@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS public.user_sessions
     expires_at timestamp with time zone NOT NULL,
     is_active boolean,
     ip_address character varying COLLATE pg_catalog."default",
+    user_agent text COLLATE pg_catalog."default", 
     CONSTRAINT user_sessions_pkey PRIMARY KEY (session_id)
 );
 
