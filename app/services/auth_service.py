@@ -84,8 +84,10 @@ def create_user(db: Session, user: UserCreate):
     db.add(db_user)
     db.flush()  # commit 전에 db_user.user_id를 확보 (FK에 필요)
 
-    if not role_names:
+    if not user.roles:
         role_names = [DEFAULT_ROLE_NAME]
+    else:
+        role_names = user.roles
 
     roles = db.query(Role).filter(Role.role_name.in_(role_names)).all()
     missing = set(role_names) - {r.role_name for r in roles}
