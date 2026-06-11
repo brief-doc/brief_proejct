@@ -4,9 +4,8 @@ sqlalchemy
 psycopg2-binary
 redis
 
-pydantic
-ruff
 
+# RAG / LLM
 langchain
 langchain-community
 langchain-chroma
@@ -17,10 +16,11 @@ chromadb
 sentence-transformers
 rank-bm25
 pypdf
+
+# 기타
 python-dotenv
 numpy
 requests
-=======
 
 # JWT and password hashing
 python-jose[cryptography]
@@ -30,4 +30,4 @@ pydantic[email] # 이메일 유효성 검사
 
 ##코드 규칙 검사 및 자동 포맷팅
 ruff
-
+python-multipart

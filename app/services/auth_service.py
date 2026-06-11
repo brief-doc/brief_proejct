@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
-
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
-from app.db.models import User, UserSession
+from app.db.models import User, UserSession, Role, UserRole
 from app.schemas.user import UserCreate
 
 
@@ -72,16 +72,29 @@ def deactivate_session(db: Session, session: UserSession):
     db.commit()
     return session
 
+DEFAULT_ROLE_NAME = "실무 담당자"
 
 def create_user(db: Session, user: UserCreate):
     db_user = User(
         user_email=user.email,
         user_password=hash_password(user.password),
-        user_rank=1,
         user_name=user.name,
-        user_create=datetime.now(),
+        created_at=datetime.now(timezone.utc),  # user_rank 제거, user_create → created_at
     )
     db.add(db_user)
+    db.flush()  # commit 전에 db_user.user_id를 확보 (FK에 필요)
+
+    if not role_names:
+        role_names = [DEFAULT_ROLE_NAME]
+
+    roles = db.query(Role).filter(Role.role_name.in_(role_names)).all()
+    missing = set(role_names) - {r.role_name for r in roles}
+    if missing:
+        raise HTTPException(status_code=400, detail=f"존재하지 않는 역할: {', '.join(missing)}")
+
+    for r in roles:
+        db.add(UserRole(user_id=db_user.user_id, role_id=r.role_id))
+
     db.commit()
     db.refresh(db_user)
     return db_user
@@ -94,7 +107,7 @@ def reset_user_password(db: Session, user_id: int, password: str = "000000"):
 
     user.user_password = hash_password(password)
     user.user_login = None
-    user.user_update = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(user)
@@ -134,7 +147,7 @@ def change_password(db: Session, user_id: int, current_password: str, new_passwo
     
     user.user_password = hash_password(new_password)
     user.user_login = user_login or datetime.now(timezone.utc)
-    user.user_update = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(timezone.utc)
     
     db.commit()
     db.refresh(user)
