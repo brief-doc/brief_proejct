@@ -9,17 +9,17 @@ ON CONFLICT (role_name) DO NOTHING;
 
 -- ── 사용자 (users) ─────────────────────────────────────────────
 INSERT INTO public.users -- 초기 비밀번호 000000
-    (user_id, user_email, user_password, user_name)
+    (user_email, user_password, user_name, created_at)
 VALUES
     -- 1) 시스템 관리자
-    (1, 'admin@agency.go.kr',
+    ('admin@agency.go.kr',
      '$5$rounds=535000$eWXQtRpuhm6Pp4Ta$iU/8OnPLQ7T6Jr0ExwXMP7uNvdllnabDN/u3e7WU8d8',
-      '김관리'),
+      '김관리', '2026-06-01 09:00:00.000001+09'),
  
     -- 2) 박과장 — 결재권자 겸 실무 (프론트엔드 박과장 케이스)
-    (2, 'park.jihun@agency.go.kr',
+    ('park.jihun@agency.go.kr',
      '$5$rounds=535000$b7Ulg2rRKCGqdJgG$i9ubG0MFZANEMAq2s/zLJBW7g5X3T.JhkIHZT21Mm77',
-      '박지훈');
+      '박지훈', '2026-06-01 09:00:00.000002+09');
  
  -- ── 사용자역할 (user_role) ─────────────────────────────────────────────
 INSERT INTO public.user_role 

@@ -1,11 +1,12 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
+from typing import List, Optional
 
 
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
     name: str
-    roles: list[str] | None = None  # 미지정 시 기본 역할
+    roles: Optional[List[str]] = Field(default_factory=list)
 
 
 class Token(BaseModel):
