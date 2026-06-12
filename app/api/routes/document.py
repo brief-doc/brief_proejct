@@ -47,7 +47,7 @@ def soft_delete_document(
     current_user = Depends(get_current_user),
 ):
     # 핵심 로직은 모두 서비스로 위임합니다.
-    success = doc_service.soft_delete_doc(db, doc_id=doc_id, user_id=current_user)
+    success = doc_service.soft_delete_doc(db, doc_id=doc_id, user_id=current_user.user_id)
     
     # 결과에 따른 분기(예외 처리)만 라우터가 담당
     if not success:
@@ -65,7 +65,7 @@ def update_document(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),   
 ):
-    # doc = doc_service.update_doc(db, doc_id, current_user.user_id, payload)
+
     doc = doc_service.update_doc(db, doc_id, current_user.user_id, payload)
     if doc is None:
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다")
