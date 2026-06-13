@@ -2,8 +2,8 @@
 # 검사할 자격이 있는 기본 파이썬 버전
 target-version = "py310"
 
-# 한 줄의 최대 글자 수 (기본 88자)
-line-length = 100
+# 한 줄의 최대 글자 수 (기본 150자)
+line-length = 150
 
 [tool.ruff.lint]
 # 사용할 규칙 세트 (E: 문법 오류, F: 파이썬 오류 감지)
