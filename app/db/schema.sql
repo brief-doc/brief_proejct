@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS public.draft
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     CONSTRAINT draft_pkey PRIMARY KEY (draft_id),
-    CONSTRAINT chk_draft_status CHECK (status IN ('pending', 'approved', 'rejected'))
+    CONSTRAINT chk_draft_status CHECK (status IN ('pending', 'approved', 'rejected','canceled', 'draft'))
 );
 
 -- ── 알림 ───────────────────────────────────────────────────
