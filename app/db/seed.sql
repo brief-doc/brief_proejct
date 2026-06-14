@@ -52,17 +52,27 @@ VALUES
      '○ 담당자 지정 및 책임 명확화\n○ 접근권한 차등 부여\n○ 분기별 정기 점검',
      '2026-05-25 16:20:00+09', '2026-05-25 16:35:00+09', false, 1);
 
--- ── 작업 이력 (job) — 요약/임베딩 처리 ─────────────────────
+-- ── 작업 이력 (job) — 요약/임베딩/파이프라인 처리 ───────────
 INSERT INTO public.job
-    (job_id, job_start, job_finish, doc_id, user_id, job_type, job_status)
+    (job_id, job_start, job_finish, doc_id, user_id, job_type, job_status,
+     pipeline_stage, progress, is_cancelled, file_path, error_stage, error_message)
 OVERRIDING SYSTEM VALUE
 VALUES
-    (1, '2026-06-01 09:13:00', '2026-06-01 09:14:30', 1, 2, 'summarize', 'success'),
-    (2, '2026-06-01 09:15:00', '2026-06-01 09:16:10', 1, 2, 'embed',     'success'),
-    (3, '2026-05-30 14:06:00', '2026-05-30 14:07:20', 2, 2, 'summarize', 'success'),
-    (4, '2026-05-28 10:41:00', '2026-05-28 10:42:30', 3, 1, 'summarize', 'success'),
-    (5, '2026-06-08 09:00:00', NULL,                  4, 1, 'summarize', 'running'),
-    (6, '2026-06-07 18:20:00', '2026-06-07 18:20:40', 4, 1, 'embed',     'failed');
+    -- 기존 단순 요약/임베딩 Job (파이프라인 컬럼은 NULL)
+    (1, '2026-06-01 09:13:00', '2026-06-01 09:14:30', 1, 2, 'summarize', 'success', NULL, NULL, NULL, NULL, NULL, NULL),
+    (2, '2026-06-01 09:15:00', '2026-06-01 09:16:10', 1, 2, 'embed',     'success', NULL, NULL, NULL, NULL, NULL, NULL),
+    (3, '2026-05-30 14:06:00', '2026-05-30 14:07:20', 2, 2, 'summarize', 'success', NULL, NULL, NULL, NULL, NULL, NULL),
+    (4, '2026-05-28 10:41:00', '2026-05-28 10:42:30', 3, 1, 'summarize', 'success', NULL, NULL, NULL, NULL, NULL, NULL),
+    (5, '2026-06-08 09:00:00', NULL,                  4, 1, 'summarize', 'running', NULL, NULL, NULL, NULL, NULL, NULL),
+    (6, '2026-06-07 18:20:00', '2026-06-07 18:20:40', 4, 1, 'embed',     'failed',  NULL, NULL, NULL, NULL, NULL, NULL),
+
+    -- 파이프라인 Job 샘플 (완료)
+    (7, '2026-06-10 10:00:00', '2026-06-10 10:02:15', 1, 2, 'document_pipeline', 'completed',
+     'completed', 100, false, NULL, NULL, NULL),
+
+    -- 파이프라인 Job 샘플 (OCR 단계 실패)
+    (8, '2026-06-11 14:30:00', '2026-06-11 14:30:45', NULL, 2, 'document_pipeline', 'failed',
+     'failed', 5, false, NULL, 'ocr', '원문 텍스트를 추출할 수 없습니다. 스캔 이미지이거나 암호화된 파일일 수 있습니다.');
 
 -- ── 변경 감사 로그 (history) ───────────────────────────────
 INSERT INTO public.history
@@ -134,7 +144,7 @@ VALUES
 
 -- ── 시퀀스 재정렬 (명시적 ID 삽입 후 다음 insert 충돌 방지) ──
 SELECT setval(pg_get_serial_sequence('public.doc',           'doc_id'),     (SELECT MAX(doc_id)     FROM public.doc));
-SELECT setval(pg_get_serial_sequence('public.job',           'job_id'),     (SELECT MAX(job_id)     FROM public.job));
+SELECT setval(pg_get_serial_sequence('public.job',           'job_id'),     (SELECT MAX(job_id)     FROM public.job));  -- 현재 max=8
 SELECT setval(pg_get_serial_sequence('public.history',       'history_id'), (SELECT MAX(history_id) FROM public.history));
 SELECT setval(pg_get_serial_sequence('public.rag_query',     'query_id'),   (SELECT MAX(query_id)   FROM public.rag_query));
 SELECT setval(pg_get_serial_sequence('public.rag_query_ref', 'ref_id'),     (SELECT MAX(ref_id)     FROM public.rag_query_ref));

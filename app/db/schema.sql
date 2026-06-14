@@ -75,8 +75,17 @@ CREATE TABLE IF NOT EXISTS public.job
     job_finish timestamp without time zone,
     doc_id integer,
     user_id integer,
-    job_type character varying COLLATE pg_catalog."default",   -- summarize / embed / batch
-    job_status character varying COLLATE pg_catalog."default", -- pending / running / success / failed
+    job_type character varying COLLATE pg_catalog."default",    -- summarize / embed / batch / document_pipeline
+    job_status character varying COLLATE pg_catalog."default",  -- pending / running / success / failed / completed / cancelled
+
+    -- ── 파이프라인 전용 컬럼 (job_type = 'document_pipeline' 에서만 사용) ──
+    pipeline_stage character varying COLLATE pg_catalog."default",  -- uploaded / ocr / embedding / summarizing / completed / failed / cancelled
+    progress integer DEFAULT 0,                                     -- 진행률 0~100
+    is_cancelled boolean DEFAULT false,                             -- 취소 요청 플래그
+    file_path character varying COLLATE pg_catalog."default",       -- 임시 업로드 파일 경로
+    error_stage character varying COLLATE pg_catalog."default",     -- 실패 발생 단계
+    error_message text COLLATE pg_catalog."default",                -- 실패 상세 메시지
+
     CONSTRAINT job_pkey PRIMARY KEY (job_id)
 );
 COMMENT ON TABLE public.job IS '사용자 작업이력';
