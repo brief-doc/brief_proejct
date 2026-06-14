@@ -1,15 +1,15 @@
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import (
-    CheckConstraint,
+    TIMESTAMP,
     Boolean,
+    CheckConstraint,
     Column,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
-    TIMESTAMP,
     text,
 )
 from sqlalchemy.orm import relationship

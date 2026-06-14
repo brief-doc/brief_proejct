@@ -1,12 +1,12 @@
 # 버전 : paddlepaddle==3.0.0
-from paddleocr import PaddleOCR, PPStructureV3
 import sys
-import cv2
-import numpy as np
-from pathlib import Path
 from html import unescape
 from html.parser import HTMLParser
+from pathlib import Path
 
+import cv2
+import numpy as np
+from paddleocr import PaddleOCR, PPStructureV3
 
 # ── 0. 크롭 이미지 OCR 엔진 (extractor_pdf_docx, extractor_hwp 용) ──────────
 

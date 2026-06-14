@@ -87,13 +87,12 @@ def run_ocr(ocr, pdf_doc, item, label: str) -> str | None:
     try:
         img_bgr = preprocess_image(img_bgr)
         lines = readtext_filtered(ocr, img_bgr)
-        img_bgr = img_rgb = None
+        img_bgr = None
         gc.collect()
 
         extracted = clean_text("\n".join(lines))
 
         if extracted.strip():
-            type_name = "차트/그래프" if label == "CHART" else "이미지"
             formatted = extracted.strip().replace("\n", "\n> ")
             print(f"  Page {page_no} [{label}] OCR 성공!")
             return f"\n\n> {formatted}\n\n"

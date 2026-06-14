@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, status, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
-from app.schemas.document import DocResponse, DocDetail, DocUpdate, PaginatedDocResponse
-from app.services import document_service as doc_service
 from app.core.security import get_current_user
+from app.db.database import get_db
+from app.schemas.document import DocDetail, DocUpdate, PaginatedDocResponse
+from app.services import document_service as doc_service
 
 router = APIRouter(prefix="/documents", tags=["docs"])
 

@@ -1,6 +1,8 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+
 from app.db.models import Document, Job
 from app.schemas.document import DocResponse, DocUpdate
 
@@ -84,7 +86,7 @@ def get_docs_detail(
         ).first()   
     )
     
-    return doc_detail;
+    return doc_detail
 
 
 # 문서 삭제

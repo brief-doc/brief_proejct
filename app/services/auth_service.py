@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
-from app.db.models import User, UserSession, Role, UserRole
+from app.db.models import Role, User, UserRole, UserSession
 from app.schemas.user import UserCreate
 
 
