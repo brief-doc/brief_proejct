@@ -61,25 +61,23 @@ def _auto_classify(text: str) -> str:
     return "기타"
 
 
-def _push_progress(user_id: int, job_id: int, stage: str, progress: int) -> None:
-    """SSE를 통해 클라이언트에 실시간 진행률 전송"""
+def _push_stage(user_id: int, job_id: int, stage: str) -> None:
+    """SSE를 통해 클라이언트에 현재 단계 전송"""
     notification_service.push_event(user_id, {
         "type": "pipeline_progress",
         "job_id": job_id,
         "stage": stage,
-        "progress": progress,
     })
 
 
-def _update_job(db: Session, job: Job, stage: str, progress: int, **kwargs) -> None:
-    """DB 상태 업데이트 + SSE 진행률 푸시"""
+def _update_job(db: Session, job: Job, stage: str, **kwargs) -> None:
+    """DB 상태 업데이트 + SSE 단계 푸시"""
     job.pipeline_stage = stage
-    job.progress = progress
     job.job_status = "running"
     for k, v in kwargs.items():
         setattr(job, k, v)
     db.commit()
-    _push_progress(job.user_id, job.job_id, stage, progress)
+    _push_stage(job.user_id, job.job_id, stage)
 
 
 def _fail_job(db: Session, job: Job, stage: str, message: str) -> None:
@@ -94,7 +92,7 @@ def _fail_job(db: Session, job: Job, stage: str, message: str) -> None:
     job.error_message = message
     job.job_finish = _now()
     db.commit()
-    _push_progress(job.user_id, job.job_id, "failed", job.progress or 0)
+    _push_stage(job.user_id, job.job_id, "failed")
 
 
 def _cancel_cleanup(db: Session, job: Job) -> None:
@@ -103,7 +101,7 @@ def _cancel_cleanup(db: Session, job: Job) -> None:
     job.pipeline_stage = "cancelled"
     job.job_finish = _now()
     db.commit()
-    _push_progress(job.user_id, job.job_id, "cancelled", job.progress or 0)
+    _push_stage(job.user_id, job.job_id, "cancelled")
     _cleanup_file(job.file_path)
 
 
@@ -138,7 +136,6 @@ def create_pipeline_job(db: Session, user_id: int, file_path: str) -> Job:
         job_type="document_pipeline",
         job_status="pending",
         pipeline_stage="uploaded",
-        progress=0,
         is_cancelled=False,
         file_path=file_path,
         job_start=_now(),
@@ -210,7 +207,7 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
             _cancel_cleanup(db, job)
             return
 
-        _update_job(db, job, "ocr", progress=5)
+        _update_job(db, job, "ocr")
 
         try:
             from app.ocr.extractor import process_document
@@ -230,7 +227,7 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
             _notify_failure(db, user_id, job_id, filename, "원문 추출")
             return
 
-        _update_job(db, job, "ocr", progress=40)
+        _update_job(db, job, "ocr")
 
         # ── 2. Document 레코드 생성 및 원문 저장 ──────────────
         if job.is_cancelled:
@@ -260,7 +257,7 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
             _cancel_cleanup(db, job)
             return
 
-        _update_job(db, job, "embedding", progress=45)
+        _update_job(db, job, "embedding")
 
         try:
             from app.llm.ingest import ingest_markdown
@@ -279,14 +276,14 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
             # 임베딩 실패는 요약·저장에 영향 없으므로 경고만 남기고 계속 진행
             print(f"[pipeline job={job_id}] 임베딩 실패 (계속 진행): {e}")
 
-        _update_job(db, job, "embedding", progress=70)
+        _update_job(db, job, "embedding")
 
         # ── 4. 카테고리 자동 분류 + LLM 요약 (70% → 95%) ──────
         if job.is_cancelled:
             _cancel_cleanup(db, job)
             return
 
-        _update_job(db, job, "summarizing", progress=72)
+        _update_job(db, job, "summarizing")
         category = _auto_classify(raw_text)
 
         try:
@@ -308,7 +305,7 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
             _notify_failure(db, user_id, job_id, filename, "요약")
             return
 
-        _update_job(db, job, "summarizing", progress=95)
+        _update_job(db, job, "summarizing")
 
         # ── 5. 최종 저장 (95% → 100%) ──────────────────────────
         try:
@@ -317,7 +314,6 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
             doc.updated_at = _now()
             job.job_status = "completed"
             job.pipeline_stage = "completed"
-            job.progress = 100
             job.job_finish = _now()
             db.commit()
         except Exception as e:
@@ -332,8 +328,8 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
         except Exception:
             pass
 
-        # 완료: SSE 100% 푸시 + 알림
-        _push_progress(user_id, job_id, "completed", 100)
+        # 완료: SSE 단계 푸시 + 알림
+        _push_stage(user_id, job_id, "completed")
         try:
             notification_service.create_notification(
                 db=db,

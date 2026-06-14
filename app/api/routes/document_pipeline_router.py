@@ -24,7 +24,6 @@ class JobOut(BaseModel):
     job_id: int
     job_status: str
     pipeline_stage: str | None
-    progress: int | None
     is_cancelled: bool | None
     file_path: str | None
     error_stage: str | None

@@ -80,7 +80,6 @@ CREATE TABLE IF NOT EXISTS public.job
 
     -- ── 파이프라인 전용 컬럼 (job_type = 'document_pipeline' 에서만 사용) ──
     pipeline_stage character varying COLLATE pg_catalog."default",  -- uploaded / ocr / embedding / summarizing / completed / failed / cancelled
-    progress integer DEFAULT 0,                                     -- 진행률 0~100
     is_cancelled boolean DEFAULT false,                             -- 취소 요청 플래그
     file_path character varying COLLATE pg_catalog."default",       -- 임시 업로드 파일 경로
     error_stage character varying COLLATE pg_catalog."default",     -- 실패 발생 단계

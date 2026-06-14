@@ -101,16 +101,7 @@ class Job(Base):
     user_id = Column(Integer, ForeignKey("users.user_id"))
     job_type = Column(String)  # summarize / embed / batch / document_pipeline
     job_status = Column(String)  # pending / running / success / failed / completed / cancelled
-
-    # ── 파이프라인 전용 컬럼 (document_pipeline 타입에서 사용) ──────────────
-    # 마이그레이션: ALTER TABLE job ADD COLUMN IF NOT EXISTS pipeline_stage VARCHAR;
-    # ALTER TABLE job ADD COLUMN IF NOT EXISTS progress INTEGER DEFAULT 0;
-    # ALTER TABLE job ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN DEFAULT false;
-    # ALTER TABLE job ADD COLUMN IF NOT EXISTS file_path VARCHAR;
-    # ALTER TABLE job ADD COLUMN IF NOT EXISTS error_stage VARCHAR;
-    # ALTER TABLE job ADD COLUMN IF NOT EXISTS error_message TEXT;
     pipeline_stage = Column(String, nullable=True)   # uploaded/ocr/embedding/summarizing/completed
-    progress = Column(Integer, nullable=True)         # 0–100
     is_cancelled = Column(Boolean, nullable=True)     # 취소 요청 플래그
     file_path = Column(String, nullable=True)         # 임시 파일 경로
     error_stage = Column(String, nullable=True)       # 실패 발생 단계
