@@ -26,11 +26,11 @@ def create_draft(
     current_user=Depends(get_current_user),
 ):
     draft = draft_service.create_draft(db, author_id=current_user.user_id, payload=payload)
-    if payload.action == "submit":
+    if payload.action == "submit" and draft.approver_id:
         try:
             notification_service.create_notification(
                 db=db,
-                user_id=current_user.user_id,
+                user_id=draft.approver_id,
                 message=f"'{draft.title}' 기안이 상신되었습니다.",
                 domain_type="APPROVAL",
                 resource_id=draft.draft_id,
@@ -162,11 +162,11 @@ def update_draft(
 
     if not draft:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="기안을 찾을 수 없습니다.")
-    if payload.action == "submit":
+    if payload.action == "submit" and draft.approver_id:
         try:
             notification_service.create_notification(
                 db=db,
-                user_id=current_user.user_id,
+                user_id=draft.approver_id,
                 message=f"'{draft.title}' 기안이 상신되었습니다.",
                 domain_type="APPROVAL",
                 resource_id=draft.draft_id,
