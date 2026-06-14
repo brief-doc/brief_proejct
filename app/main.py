@@ -14,6 +14,7 @@ from sqlalchemy import text
 
 from app.api.routes.auth import router as auth_router
 from app.api.routes.document import router as document_router
+from app.api.routes.draft_router import router as draft_router
 from app.db.database import engine
 from app.llm.config import CURRENT_MODEL, LLM_CONFIG
 from app.llm.pipeline import invalidate_cache, run_query
@@ -57,6 +58,7 @@ executor = ThreadPoolExecutor(max_workers=3)
 # include API routers
 app.include_router(auth_router)
 app.include_router(document_router)
+app.include_router(draft_router)
 
 
 # ── 기본 라우트 ────────────────────────────────────────────────────────────

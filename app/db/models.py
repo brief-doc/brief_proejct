@@ -191,7 +191,7 @@ class Draft(Base):
     __tablename__ = "draft"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'approved', 'rejected')",
+            "status IN ('draft', 'pending', 'approved', 'rejected', 'canceled')",
             name="chk_draft_status",
         ),
     )
@@ -205,7 +205,7 @@ class Draft(Base):
     source_doc_id = Column(
         Integer, ForeignKey("doc.doc_id", ondelete="SET NULL")
     )  # 첨부 근거 문서(요약). 없을 수 있음
-    status = Column(String, nullable=False, server_default=text("'pending'"), index=True)
+    status = Column(String, nullable=False, server_default=text("'draft'"), index=True)
 
     # ▼ 결재 정보 (병합) — 대기(pending) 중엔 NULL
     approver_id = Column(Integer, ForeignKey("users.user_id"))  # 결재한 사람
