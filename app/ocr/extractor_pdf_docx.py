@@ -87,13 +87,12 @@ def run_ocr(ocr, pdf_doc, item, label: str) -> str | None:
     try:
         img_bgr = preprocess_image(img_bgr)
         lines = readtext_filtered(ocr, img_bgr)
-        img_bgr = img_rgb = None
+        img_bgr = None
         gc.collect()
 
         extracted = clean_text("\n".join(lines))
 
         if extracted.strip():
-            type_name = "차트/그래프" if label == "CHART" else "이미지"
             formatted = extracted.strip().replace("\n", "\n> ")
             print(f"  Page {page_no} [{label}] OCR 성공!")
             return f"\n\n> {formatted}\n\n"
@@ -116,9 +115,7 @@ def convert_pdf_batch(pdf_path: str, batch_pages: list):
     pipeline_options = PdfPipelineOptions()
     pipeline_options.do_ocr = False
 
-    converter = DocumentConverter(
-        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
-    )
+    converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)})
     result = converter.convert(
         pdf_path,
         page_range=(min(batch_pages), max(batch_pages)),
@@ -150,11 +147,13 @@ def process_pdf(pdf_path: str, page_filter: set = None) -> list[str]:
             continue
 
         all_items = list(doc.iterate_items())
-        all_items.sort(key=lambda x: (
-            x[0].prov[0].page_no if x[0].prov else float("inf"),
-            -x[0].prov[0].bbox.t if x[0].prov else 0,
-            x[0].prov[0].bbox.l if x[0].prov else 0,
-        ))
+        all_items.sort(
+            key=lambda x: (
+                x[0].prov[0].page_no if x[0].prov else float("inf"),
+                -x[0].prov[0].bbox.t if x[0].prov else 0,
+                x[0].prov[0].bbox.l if x[0].prov else 0,
+            )
+        )
 
         for item, level in all_items:
             label = item.label.name

@@ -19,6 +19,7 @@ router = APIRouter(prefix="/drafts", tags=["drafts"])
 
 # ── 기안 작성 / 목록 ────────────────────────────────────────────────────────────
 
+
 @router.post("/", response_model=DraftDetail, status_code=status.HTTP_201_CREATED)
 def create_draft(
     payload: DraftCreate,
@@ -65,6 +66,7 @@ def list_drafts(
 
 # ── 결재자 전용 엔드포인트 (/{draft_id} 보다 먼저 등록해야 라우팅 충돌 방지) ──────
 
+
 @router.get("/approvals/", response_model=PaginatedApprovalResponse)
 def list_approvals(
     skip: int = Query(0, ge=0),
@@ -72,9 +74,7 @@ def list_approvals(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    total, items = draft_service.get_approval_list(
-        db, approver_id=current_user.user_id, skip=skip, limit=limit
-    )
+    total, items = draft_service.get_approval_list(db, approver_id=current_user.user_id, skip=skip, limit=limit)
     page = (skip // limit) + 1 if limit > 0 else 1
     return {"items": items, "total_count": total, "page": page, "limit": limit}
 
@@ -85,9 +85,7 @@ def get_approval_detail(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    detail = draft_service.get_approval_detail(
-        db, draft_id=draft_id, approver_id=current_user.user_id
-    )
+    detail = draft_service.get_approval_detail(db, draft_id=draft_id, approver_id=current_user.user_id)
     if not detail:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -132,6 +130,7 @@ def process_decision(
 
 # ── 기안 단건 / 수정 / 취소 ────────────────────────────────────────────────────
 
+
 @router.get("/{draft_id}", response_model=DraftDetail)
 def get_draft(
     draft_id: int,
@@ -154,9 +153,7 @@ def update_draft(
     current_user=Depends(get_current_user),
 ):
     try:
-        draft = draft_service.update_draft(
-            db, draft_id=draft_id, author_id=current_user.user_id, payload=payload
-        )
+        draft = draft_service.update_draft(db, draft_id=draft_id, author_id=current_user.user_id, payload=payload)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

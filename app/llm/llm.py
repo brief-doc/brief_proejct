@@ -82,8 +82,8 @@ def _build_huggingface(cfg: dict) -> BaseChatModel:
         tokenizer=tokenizer,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
-        do_sample=temperature > 0,       # temperature=0 이면 greedy decoding
-        return_full_text=False,          # 입력 프롬프트를 출력에 포함하지 않음
+        do_sample=temperature > 0,  # temperature=0 이면 greedy decoding
+        return_full_text=False,  # 입력 프롬프트를 출력에 포함하지 않음
         pad_token_id=tokenizer.eos_token_id,
     )
 

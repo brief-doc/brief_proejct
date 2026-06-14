@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 from datetime import datetime
 from typing import Literal, Optional
+
 from pydantic import BaseModel, model_validator
 
 
@@ -61,6 +63,7 @@ class PaginatedDraftResponse(BaseModel):
 
 
 # ── 결재자 전용 스키마 ──────────────────────────────────────────────────────────
+
 
 class ApprovalListItem(BaseModel):
     draft_id: int

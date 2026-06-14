@@ -1,15 +1,15 @@
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import (
-    CheckConstraint,
+    TIMESTAMP,
     Boolean,
+    CheckConstraint,
     Column,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
-    TIMESTAMP,
     text,
 )
 from sqlalchemy.orm import relationship
@@ -49,12 +49,8 @@ class User(Base):
     user_roles = relationship("UserRole", back_populates="user")
     rag_queries = relationship("RagQuery", back_populates="user")
     notifications = relationship("Notification", back_populates="user")
-    drafts_authored = relationship(
-        "Draft", foreign_keys="Draft.author_id", back_populates="author"
-    )
-    drafts_approved = relationship(
-        "Draft", foreign_keys="Draft.approver_id", back_populates="approver"
-    )
+    drafts_authored = relationship("Draft", foreign_keys="Draft.author_id", back_populates="author")
+    drafts_approved = relationship("Draft", foreign_keys="Draft.approver_id", back_populates="approver")
 
 
 class UserSession(Base):
@@ -67,7 +63,7 @@ class UserSession(Base):
     expires_at = Column(TIMESTAMP(timezone=True), nullable=False)
     is_active = Column(Boolean)
     ip_address = Column(String)
-    user_agent = Column(Text) 
+    user_agent = Column(Text)
 
     user = relationship("User", back_populates="sessions")
 
@@ -101,11 +97,11 @@ class Job(Base):
     user_id = Column(Integer, ForeignKey("users.user_id"))
     job_type = Column(String)  # summarize / embed / batch / document_pipeline
     job_status = Column(String)  # pending / running / success / failed / completed / cancelled
-    pipeline_stage = Column(String, nullable=True)   # uploaded/ocr/embedding/summarizing/completed
-    is_cancelled = Column(Boolean, nullable=True)     # 취소 요청 플래그
-    file_path = Column(String, nullable=True)         # 임시 파일 경로
-    error_stage = Column(String, nullable=True)       # 실패 발생 단계
-    error_message = Column(Text, nullable=True)       # 실패 상세 메시지
+    pipeline_stage = Column(String, nullable=True)  # uploaded/ocr/embedding/summarizing/completed
+    is_cancelled = Column(Boolean, nullable=True)  # 취소 요청 플래그
+    file_path = Column(String, nullable=True)  # 임시 파일 경로
+    error_stage = Column(String, nullable=True)  # 실패 발생 단계
+    error_message = Column(Text, nullable=True)  # 실패 상세 메시지
 
     user = relationship("User", back_populates="jobs")
     document = relationship("Document", back_populates="jobs")
@@ -202,14 +198,10 @@ class Draft(Base):
     )
 
     draft_id = Column(Integer, primary_key=True, autoincrement=True)
-    author_id = Column(
-        Integer, ForeignKey("users.user_id"), nullable=False, index=True
-    )  # 작성자(실무 담당자)
+    author_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, index=True)  # 작성자(실무 담당자)
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)  # 상신 내용
-    source_doc_id = Column(
-        Integer, ForeignKey("doc.doc_id", ondelete="SET NULL")
-    )  # 첨부 근거 문서(요약). 없을 수 있음
+    source_doc_id = Column(Integer, ForeignKey("doc.doc_id", ondelete="SET NULL"))  # 첨부 근거 문서(요약). 없을 수 있음
     status = Column(String, nullable=False, server_default=text("'draft'"), index=True)
 
     # ▼ 결재 정보 (병합) — 대기(pending) 중엔 NULL
@@ -221,20 +213,14 @@ class Draft(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
     updated_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
-    author = relationship(
-        "User", foreign_keys=[author_id], back_populates="drafts_authored"
-    )
-    approver = relationship(
-        "User", foreign_keys=[approver_id], back_populates="drafts_approved"
-    )
+    author = relationship("User", foreign_keys=[author_id], back_populates="drafts_authored")
+    approver = relationship("User", foreign_keys=[approver_id], back_populates="drafts_approved")
     source_doc = relationship("Document", foreign_keys=[source_doc_id])
 
 
 class Notification(Base):
     __tablename__ = "notification"
-    __table_args__ = (
-        Index("idx_noti_user_read", "user_id", "is_read"),
-    )
+    __table_args__ = (Index("idx_noti_user_read", "user_id", "is_read"),)
 
     noti_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(

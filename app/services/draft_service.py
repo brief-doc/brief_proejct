@@ -1,4 +1,5 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy.orm import Session
 
 from app.db.models import Document, Draft, User
@@ -70,16 +71,10 @@ def get_draft_by_id(db: Session, draft_id: int) -> Draft | None:
 
 
 def get_draft_detail(db: Session, draft_id: int, author_id: int) -> Draft | None:
-    return (
-        db.query(Draft)
-        .filter(Draft.draft_id == draft_id, Draft.author_id == author_id)
-        .first()
-    )
+    return db.query(Draft).filter(Draft.draft_id == draft_id, Draft.author_id == author_id).first()
 
 
-def update_draft(
-    db: Session, draft_id: int, author_id: int, payload: DraftUpdate
-) -> Draft | None:
+def update_draft(db: Session, draft_id: int, author_id: int, payload: DraftUpdate) -> Draft | None:
     draft = get_draft_detail(db, draft_id, author_id)
     if not draft:
         return None
@@ -140,10 +135,7 @@ def get_approval_list(
 
 def get_approval_detail(db: Session, draft_id: int, approver_id: int) -> dict | None:
     row = (
-        db.query(Draft, User)
-        .join(User, Draft.author_id == User.user_id)
-        .filter(Draft.draft_id == draft_id, Draft.approver_id == approver_id)
-        .first()
+        db.query(Draft, User).join(User, Draft.author_id == User.user_id).filter(Draft.draft_id == draft_id, Draft.approver_id == approver_id).first()
     )
     if not row:
         return None

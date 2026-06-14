@@ -14,8 +14,8 @@ from sqlalchemy import text
 
 from app.api.routes.auth import router as auth_router
 from app.api.routes.document import router as document_router
-from app.api.routes.draft_router import router as draft_router
 from app.api.routes.document_pipeline_router import router as document_pipeline_router
+from app.api.routes.draft_router import router as draft_router
 from app.api.routes.notification_router import router as notification_router
 from app.db.database import engine, get_db
 from app.llm.config import CURRENT_MODEL, LLM_CONFIG
@@ -152,10 +152,7 @@ async def upload_and_summarize(
         if not doc_text or len(doc_text) < 20:
             return {
                 "status": "error",
-                "detail": (
-                    "PDF에서 텍스트를 추출할 수 없습니다. "
-                    "스캔 이미지형 PDF이거나 암호화된 PDF일 수 있습니다."
-                ),
+                "detail": ("PDF에서 텍스트를 추출할 수 없습니다. 스캔 이미지형 PDF이거나 암호화된 PDF일 수 있습니다."),
             }
 
         # 2. 카테고리별 요약

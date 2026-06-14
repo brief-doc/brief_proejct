@@ -51,11 +51,7 @@ class MarkdownProcessor:
     ) -> dict:
         """마크다운 문서 처리 (청킹 → 저장)"""
         if not save_to_db:
-            chunks = (
-                self.chunk_by_sections(markdown_content)
-                if chunking_method == "sections"
-                else self.chunk_by_size(markdown_content)
-            )
+            chunks = self.chunk_by_sections(markdown_content) if chunking_method == "sections" else self.chunk_by_size(markdown_content)
             return {
                 "status": "success",
                 "total_chunks": len(chunks),

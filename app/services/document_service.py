@@ -1,6 +1,8 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+
 from app.db.models import Document, Job
 from app.schemas.document import DocResponse, DocUpdate
 
@@ -10,27 +12,24 @@ def get_docs_with_latest_job(
     db: Session,
     user_id: int,
     category: str | None = None,
-    keyword: str | None = None, 
+    keyword: str | None = None,
     sort_by: str = "created_at",
     skip: int = 0,
     limit: int = 50,
-) -> tuple[int, list[DocResponse]]: 
-    
+) -> tuple[int, list[DocResponse]]:
+
     # 1. 기본 베이스 쿼리 빌드
     query = (
         db.query(Document, Job)
         .join(Job, Job.doc_id == Document.doc_id)
         .distinct(Document.doc_id)
-        .filter(
-            Document.user_id == user_id,    
-            Document.is_deleted.is_(False)
-        )
+        .filter(Document.user_id == user_id, Document.is_deleted.is_(False))
     )
 
     # 2. 카테고리
     if category is not None:
         query = query.filter(Document.category == category)
-        
+
     # 3. 검색어(keyword)
     if keyword is not None and keyword.strip() != "":
         query = query.filter(Document.file_name.contains(keyword))
@@ -64,9 +63,10 @@ def get_docs_with_latest_job(
         )
         for doc, job in results
     ]
-    
+
     # 7. 총 개수와 리스트를 함께 리턴
     return total_count, docs_list
+
 
 # 문서 상세 조회
 def get_docs_detail(
@@ -77,14 +77,15 @@ def get_docs_detail(
     doc_detail = (
         db.query(Document)
         .filter(
-            Document.user_id == user_id,    
+            Document.user_id == user_id,
             Document.is_deleted.is_(False),
             Document.doc_id == doc_id,
-            #완료 상태만 조회 가능
-        ).first()   
+            # 완료 상태만 조회 가능
+        )
+        .first()
     )
-    
-    return doc_detail;
+
+    return doc_detail
 
 
 # 문서 삭제
@@ -92,21 +93,11 @@ def soft_delete_doc(
     db: Session,
     doc_id: int,
     user_id: int,
-        
 ):
-    doc = (
-        db.query(Document)
-        .filter(
-            Document.doc_id == doc_id,
-            Document.user_id == user_id,
-            Document.is_deleted.is_(False)
-        )
-        .first()
-
-    )
+    doc = db.query(Document).filter(Document.doc_id == doc_id, Document.user_id == user_id, Document.is_deleted.is_(False)).first()
     if not doc:
         return False
-    
+
     doc.is_deleted = True
 
     db.commit()
