@@ -17,9 +17,10 @@ from app.api.routes.document import router as document_router
 from app.api.routes.document_pipeline_router import router as document_pipeline_router
 from app.api.routes.draft_router import router as draft_router
 from app.api.routes.notification_router import router as notification_router
+from app.api.routes.rag_router import router as rag_router
 from app.db.database import engine, get_db
 from app.llm.config import CURRENT_MODEL, LLM_CONFIG
-from app.llm.pipeline import invalidate_cache, run_query
+from app.llm.pipeline import invalidate_cache
 from app.services import notification_service
 
 # ── 서버 시작 시 메인 스레드에서 무거운 모델 미리 로드 ─────────────────────────
@@ -64,6 +65,7 @@ app.include_router(document_router)
 app.include_router(draft_router)
 app.include_router(document_pipeline_router)
 app.include_router(notification_router)
+app.include_router(rag_router)
 
 
 @app.on_event("startup")
@@ -369,32 +371,6 @@ async def upload_and_summarize_md(
         "chunks_used": summary_result.get("chunks_used", 1),
         "summary": summary_result.get("summary", ""),
         "chunks_saved": chunks_saved,
-    }
-
-
-# ── RAG 질의응답 ────────────────────────────────────────────────────────────
-@app.post("/query/")
-async def query_documents(
-    question: str = Form(...),
-    user_id: int = Form(default=1),
-    cat_id: int = Form(default=0),
-):
-    if not question.strip():
-        return {"status": "error", "detail": "질문을 입력해주세요."}
-
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        executor,
-        lambda: run_query(question.strip(), user_id or None, cat_id or None),
-    )
-
-    if result.get("status") == "error":
-        return {"status": "error", "question": question, "detail": result.get("message")}
-
-    return {
-        "status": "success",
-        "question": question,
-        "answer": result["answer"],
     }
 
 
