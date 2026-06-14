@@ -12,6 +12,8 @@ def _now() -> datetime:
 
 
 def create_draft(db: Session, author_id: int, payload: DraftCreate) -> Draft:
+    if payload.approver_id and payload.approver_id == author_id:
+        raise ValueError("본인을 결재권자로 지정할 수 없습니다.")
     status = "pending" if payload.action == "submit" else "draft"
     draft = Draft(
         author_id=author_id,
@@ -85,6 +87,9 @@ def update_draft(
     # 임시저장(draft) 또는 반려(rejected) 상태만 수정 가능
     if draft.status not in ("draft", "rejected"):
         raise ValueError(f"'{draft.status}' 상태의 기안은 수정할 수 없습니다.")
+
+    if payload.approver_id and payload.approver_id == author_id:
+        raise ValueError("본인을 결재권자로 지정할 수 없습니다.")
 
     data = payload.model_dump(exclude_unset=True)
     action = data.pop("action", None)
