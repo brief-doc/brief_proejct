@@ -24,6 +24,7 @@ def set_loop(loop: asyncio.AbstractEventLoop) -> None:
 
 # ── SSE 구독 관리 ─────────────────────────────────────────────────────────────
 
+
 def subscribe(user_id: int) -> asyncio.Queue:
     q: asyncio.Queue = asyncio.Queue()
     _user_queues[user_id] = q
@@ -35,6 +36,7 @@ def unsubscribe(user_id: int) -> None:
 
 
 # ── 알림 생성 + 실시간 Push ──────────────────────────────────────────────────
+
 
 def create_notification(
     db: Session,
@@ -85,28 +87,21 @@ def push_event(user_id: int, payload: dict) -> None:
 
 # ── DB 조회 / 읽음 처리 ────────────────────────────────────────────────────────
 
+
 def get_notifications(
     db: Session,
     user_id: int,
     skip: int = 0,
     limit: int = 20,
 ) -> tuple[int, list[Notification]]:
-    query = (
-        db.query(Notification)
-        .filter(Notification.user_id == user_id)
-        .order_by(Notification.created_at.desc())
-    )
+    query = db.query(Notification).filter(Notification.user_id == user_id).order_by(Notification.created_at.desc())
     total = query.count()
     items = query.offset(skip).limit(limit).all()
     return total, items
 
 
 def mark_as_read(db: Session, noti_id: int, user_id: int) -> Optional[Notification]:
-    noti = (
-        db.query(Notification)
-        .filter(Notification.noti_id == noti_id, Notification.user_id == user_id)
-        .first()
-    )
+    noti = db.query(Notification).filter(Notification.noti_id == noti_id, Notification.user_id == user_id).first()
     if not noti:
         return None
     noti.is_read = True

@@ -64,6 +64,7 @@ class PaginatedDraftResponse(BaseModel):
 
 # ── 결재자 전용 스키마 ──────────────────────────────────────────────────────────
 
+
 class ApprovalListItem(BaseModel):
     draft_id: int
     title: str

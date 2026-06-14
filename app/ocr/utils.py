@@ -15,8 +15,7 @@ SAVE_CROPS = False  # 크롭 이미지 저장 여부 (디버깅 시 True로)
 LLAMA_API_KEY = "llx-YOUR_API_KEY_HERE"  # ← LlamaParse API 키 입력(doc 작업할시)
 
 # 지원 확장자
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".hwp", ".hwpx",
-                        ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".hwp", ".hwpx", ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
 
 
 def clean_text(text: str) -> str:

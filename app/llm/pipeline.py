@@ -115,8 +115,7 @@ def _log_history(user_id: int, query: str, answer: str, metas: list[dict]) -> No
             with conn.cursor() as cur:
                 doc_ids = ",".join(str(m.get("case_no", "")) for m in metas)
                 cur.execute(
-                    "INSERT INTO history (user_id,query_text,answer_text,doc_ids,created_at)"
-                    " VALUES (%s,%s,%s,%s,%s)",
+                    "INSERT INTO history (user_id,query_text,answer_text,doc_ids,created_at) VALUES (%s,%s,%s,%s,%s)",
                     (user_id, query, answer, doc_ids, datetime.now()),
                 )
     except Exception as e:
@@ -159,9 +158,7 @@ def run_query(
     print(f"[pipeline] 컨텍스트 {len(docs)}개 문서, {len(context)}자")
     print(f"[pipeline] 컨텍스트 앞 500자:\n{context[:500]}")
 
-    answer_text = (RAG_PROMPT | get_llm() | StrOutputParser()).invoke(
-        {"context": context, "question": question}
-    )
+    answer_text = (RAG_PROMPT | get_llm() | StrOutputParser()).invoke({"context": context, "question": question})
     print(f"[pipeline] LLM 응답: {answer_text[:300]}")
 
     # 3. references 구성

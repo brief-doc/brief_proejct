@@ -17,6 +17,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 # ── SSE 구독 ──────────────────────────────────────────────────────────────────
 
+
 @router.get("/subscribe")
 async def subscribe(current_user=Depends(get_current_user)):
     """
@@ -55,6 +56,7 @@ async def subscribe(current_user=Depends(get_current_user)):
 
 # ── 알림 목록 조회 ─────────────────────────────────────────────────────────────
 
+
 @router.get("/", response_model=PaginatedNotificationResponse)
 def list_notifications(
     skip: int = Query(0, ge=0),
@@ -62,14 +64,13 @@ def list_notifications(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    total, items = notification_service.get_notifications(
-        db, user_id=current_user.user_id, skip=skip, limit=limit
-    )
+    total, items = notification_service.get_notifications(db, user_id=current_user.user_id, skip=skip, limit=limit)
     page = (skip // limit) + 1 if limit > 0 else 1
     return {"items": items, "total_count": total, "page": page, "limit": limit}
 
 
 # ── 읽음 처리 ─────────────────────────────────────────────────────────────────
+
 
 @router.patch("/{noti_id}/read", response_model=NotificationOut)
 def read_notification(
@@ -77,9 +78,7 @@ def read_notification(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    noti = notification_service.mark_as_read(
-        db, noti_id=noti_id, user_id=current_user.user_id
-    )
+    noti = notification_service.mark_as_read(db, noti_id=noti_id, user_id=current_user.user_id)
     if not noti:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

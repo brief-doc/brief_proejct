@@ -25,12 +25,14 @@ class DocDetail(DocResponse):
     file_type: Optional[str] = None
     updated_at: Optional[datetime] = None
 
+
 class DocUpdate(BaseModel):
     file_name: str | None = None
     category: str | None = None
     content_sum: str | None = None
 
-#페이징용
+
+# 페이징용
 class PaginatedDocResponse(BaseModel):
     items: list[DocResponse]
     total_count: int

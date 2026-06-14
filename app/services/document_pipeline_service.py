@@ -62,11 +62,14 @@ def _auto_classify(text: str) -> str:
 
 def _push_stage(user_id: int, job_id: int, stage: str) -> None:
     """SSE를 통해 클라이언트에 현재 단계 전송"""
-    notification_service.push_event(user_id, {
-        "type": "pipeline_progress",
-        "job_id": job_id,
-        "stage": stage,
-    })
+    notification_service.push_event(
+        user_id,
+        {
+            "type": "pipeline_progress",
+            "job_id": job_id,
+            "stage": stage,
+        },
+    )
 
 
 def _update_job(db: Session, job: Job, stage: str, **kwargs) -> None:
@@ -147,11 +150,15 @@ def create_pipeline_job(db: Session, user_id: int, file_path: str) -> Job:
 
 def cancel_job(db: Session, job_id: int, user_id: int) -> Job | None:
     """취소 플래그 설정 — 파이프라인이 다음 단계 시작 전에 확인하여 중단"""
-    job = db.query(Job).filter(
-        Job.job_id == job_id,
-        Job.user_id == user_id,
-        Job.job_type == "document_pipeline",
-    ).first()
+    job = (
+        db.query(Job)
+        .filter(
+            Job.job_id == job_id,
+            Job.user_id == user_id,
+            Job.job_type == "document_pipeline",
+        )
+        .first()
+    )
     if not job:
         return None
     if job.job_status in ("completed", "failed", "cancelled"):
@@ -162,11 +169,15 @@ def cancel_job(db: Session, job_id: int, user_id: int) -> Job | None:
 
 
 def get_job(db: Session, job_id: int, user_id: int) -> Job | None:
-    return db.query(Job).filter(
-        Job.job_id == job_id,
-        Job.user_id == user_id,
-        Job.job_type == "document_pipeline",
-    ).first()
+    return (
+        db.query(Job)
+        .filter(
+            Job.job_id == job_id,
+            Job.user_id == user_id,
+            Job.job_type == "document_pipeline",
+        )
+        .first()
+    )
 
 
 def list_jobs(db: Session, user_id: int, skip: int = 0, limit: int = 20) -> list[Job]:
@@ -210,9 +221,8 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
 
         try:
             from app.ocr.extractor import process_document
-            raw_text: str = await loop.run_in_executor(
-                _executor, lambda: process_document(file_path)
-            )
+
+            raw_text: str = await loop.run_in_executor(_executor, lambda: process_document(file_path))
         except Exception as e:
             _fail_job(db, job, "ocr", f"OCR 처리 중 오류: {e}")
             _notify_failure(db, user_id, job_id, filename, "OCR")
@@ -220,7 +230,9 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
 
         if not raw_text or len(raw_text.strip()) < 20:
             _fail_job(
-                db, job, "ocr",
+                db,
+                job,
+                "ocr",
                 "원문 텍스트를 추출할 수 없습니다. 스캔 이미지이거나 암호화된 파일일 수 있습니다.",
             )
             _notify_failure(db, user_id, job_id, filename, "원문 추출")
@@ -243,7 +255,7 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
                 updated_at=_now(),
             )
             db.add(doc)
-            db.flush()        # doc_id 확보
+            db.flush()  # doc_id 확보
             job.doc_id = doc.doc_id
             db.commit()
         except Exception as e:
@@ -260,6 +272,7 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
 
         try:
             from app.llm.ingest import ingest_markdown
+
             await loop.run_in_executor(
                 _executor,
                 lambda: ingest_markdown(
@@ -287,6 +300,7 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
 
         try:
             from app.llm.summarizer import summarize_document
+
             summary_result: dict = await loop.run_in_executor(
                 _executor,
                 lambda: summarize_document(raw_text, category),
@@ -298,7 +312,9 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
 
         if summary_result.get("status") == "error" or not summary_result.get("summary", "").strip():
             _fail_job(
-                db, job, "summarizing",
+                db,
+                job,
+                "summarizing",
                 summary_result.get("message", "요약문이 생성되지 않았습니다."),
             )
             _notify_failure(db, user_id, job_id, filename, "요약")
@@ -323,6 +339,7 @@ async def run_pipeline(job_id: int, user_id: int) -> None:
         # 벡터 캐시 무효화
         try:
             from app.llm.pipeline import invalidate_cache
+
             invalidate_cache(user_id)
         except Exception:
             pass

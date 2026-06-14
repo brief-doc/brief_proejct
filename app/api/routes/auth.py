@@ -72,17 +72,20 @@ class SessionResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class ActivityUserDetail(BaseModel):
     name: str
     email: str
     roles: List[str]
     joinDate: Optional[str] = "2025.03.15"
 
+
 class RagQueryItem(BaseModel):
     id: int
     query: str
     timestamp: str
     tokensUsed: Optional[int] = None
+
 
 class DraftItem(BaseModel):
     id: int
@@ -92,10 +95,11 @@ class DraftItem(BaseModel):
     status: str
     statusLabel: str
 
+
 class UserActivityResponse(BaseModel):
     user: ActivityUserDetail
-    #ragQueries: List[RagQueryItem]
-    #drafts: List[DraftItem]
+    # ragQueries: List[RagQueryItem]
+    # drafts: List[DraftItem]
 
 
 def validate_access_and_session(request: Request, db: Session):
@@ -174,14 +178,12 @@ def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
 
 @router.post("/register", response_model=UserResponse)
 def register(user: UserCreate, request: Request, db: Session = Depends(get_db)):
-    current = validate_access_and_session(request,db)
+    current = validate_access_and_session(request, db)
     if not current or "관리자" not in _role_names(current):
-        raise HTTPException(status_code = 403, detail ="계정 생성 권한이 없습니다.")
-    
+        raise HTTPException(status_code=403, detail="계정 생성 권한이 없습니다.")
+
     if get_user_by_email(db, user.email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="이미 존재하는 이메일입니다"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 존재하는 이메일입니다")
     new_user = create_user(db, user)
     return {
         "id": new_user.user_id,
@@ -288,19 +290,20 @@ def list_users(request: Request, db: Session = Depends(get_db)):
         for user in users
     ]
 
+
 @router.get("/users/activity", response_model=UserActivityResponse)
 def get_user_activity(
-    request: Request, 
-    user_id: Optional[int] = None, # 💡 Query Parameter나 Path Parameter로 선택적 수신
-    db: Session = Depends(get_db)
+    request: Request,
+    user_id: Optional[int] = None,  # 💡 Query Parameter나 Path Parameter로 선택적 수신
+    db: Session = Depends(get_db),
 ):
     # 1. 현재 로그인한 사용자 검증 (이전 세션 검증 함수 활용)
     current_user = validate_access_and_session(request, db)
     if not current_user:
         raise HTTPException(status_code=401, detail="인증되지 않은 사용자입니다.")
-        
+
     current_roles = [ur.role.role_name for ur in current_user.user_roles]
-    
+
     # 2. 로직 분기 처리
     if user_id is not None:
         # 타인의 ID를 조회하려는 경우 -> 오직 '관리자'만 허용
@@ -312,16 +315,17 @@ def get_user_activity(
         target_user_id = current_user.user_id
 
     # 3. target_user_id를 기반으로 DB에서 질의 이력 및 결재 문서 조회 및 가공
-    #queries = db.query(RAGQuery).filter(RAGQuery.user_id == target_user_id).all()
-    #drafts = db.query(Document).filter(Document.user_id == target_user_id).all()
+    # queries = db.query(RAGQuery).filter(RAGQuery.user_id == target_user_id).all()
+    # drafts = db.query(Document).filter(Document.user_id == target_user_id).all()
     user_info = get_user(db, target_user_id)
     user_roles = _role_names(user_info)
-    
+
     return {
         "user": {"name": user_info.user_name, "email": user_info.user_email, "roles": user_roles},
-        #"ragQueries": queries,
-        #"drafts": drafts
+        # "ragQueries": queries,
+        # "drafts": drafts
     }
+
 
 @router.post("/users/{user_id}/reset-password")
 def reset_password(user_id: int, request: Request, db: Session = Depends(get_db)):
@@ -406,9 +410,7 @@ def get_sessions(request: Request, db: Session = Depends(get_db)):
 
 
 @router.delete("/sessions/{session_id}")
-def revoke_session(
-    session_id: int, request: Request, response: Response, db: Session = Depends(get_db)
-):
+def revoke_session(session_id: int, request: Request, response: Response, db: Session = Depends(get_db)):
     user = validate_access_and_session(request, db)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다")

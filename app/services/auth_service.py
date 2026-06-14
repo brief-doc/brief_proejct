@@ -73,7 +73,9 @@ def deactivate_session(db: Session, session: UserSession):
     db.commit()
     return session
 
+
 DEFAULT_ROLE_NAME = "실무 담당자"
+
 
 def create_user(db: Session, user: UserCreate):
     db_user = User(
@@ -129,29 +131,29 @@ def delete_user(db: Session, id: int):
 def change_password(db: Session, user_id: int, current_password: str, new_password: str, user_login: datetime | None = None):
     """
     사용자 비밀번호 변경 및 user_login 시간 업데이트
-    
+
     Args:
         db: Database session
         user_id: 사용자 ID
         current_password: 현재 비밀번호 (평문)
         new_password: 새로운 비밀번호 (평문)
         user_login: 로그인 시간 (기본값: 현재 시간)
-    
+
     Returns:
         업데이트된 User 객체 또는 None (현재 비밀번호 불일치 시)
     """
     user = get_user(db, user_id)
     if not user:
         return None
-    
+
     # 현재 비밀번호 검증
     if not verify_password(current_password, user.user_password):
         return None
-    
+
     user.user_password = hash_password(new_password)
     user.user_login = user_login or datetime.now(timezone.utc)
     user.updated_at = datetime.now(timezone.utc)
-    
+
     db.commit()
     db.refresh(user)
     return user
