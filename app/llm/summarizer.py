@@ -16,6 +16,7 @@
     - 청킹 설정 변경    → CHUNK_SIZE / CHUNK_OVERLAP 상수 변경
 
 공개 API:
+    classify_document_category(doc_text)     → str   (자동 카테고리 분류)
     summarize_document(doc_text, category) → dict
     build_summary_prompt(doc_text, category) → str   (하위 호환)
     CATEGORIES                               (하위 호환)
@@ -31,7 +32,7 @@ from langchain_core.output_parsers import StrOutputParser
 from .chunker import SimpleCharacterSplitter
 from .config import SUMMARY_MAP_WORKERS
 from .llm import get_summary_llm
-from .prompts import MAP_PROMPT, SUMMARY_TEMPLATES, get_reduce_prompt  # noqa: F401
+from .prompts import CLASSIFY_PROMPT, MAP_PROMPT, SUMMARY_TEMPLATES, get_reduce_prompt  # noqa: F401
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
 # CHUNK_SIZE 를 크게 잡을수록 청크 수가 줄어 Map 호출 횟수 감소 → 빨라짐
@@ -76,6 +77,28 @@ def _parallel_map(chunks: list[str]) -> list[str]:
     return results
 
 
+# ── 카테고리 자동 분류 ────────────────────────────────────────────────────────
+def classify_document_category(doc_text: str) -> str:
+    """문서 내용을 LLM으로 분석하여 카테고리를 자동 분류합니다.
+
+    Returns:
+        "민사법" | "행정법" | "형사법" | "지식재산권"
+    """
+    valid = list(SUMMARY_TEMPLATES.keys())
+    sample = doc_text[:2000].strip()
+    try:
+        result = (CLASSIFY_PROMPT | get_summary_llm() | _parser).invoke({"text": sample})
+        classified = result.strip()
+        if classified in valid:
+            return classified
+        for cat in valid:
+            if cat in classified:
+                return cat
+    except Exception as e:
+        print(f"[classify] 분류 실패: {e}")
+    return valid[0]
+
+
 # ── 메인 요약 함수 ────────────────────────────────────────────────────────────
 def summarize_document(doc_text: str, category: str) -> dict:
     """문서를 카테고리별 형식에 맞게 요약합니다.
@@ -102,7 +125,7 @@ def summarize_document(doc_text: str, category: str) -> dict:
             "message": "원문이 비어 있습니다.",
         }
 
-    resolved = category if category in SUMMARY_TEMPLATES else "기타"
+    resolved = category if category in SUMMARY_TEMPLATES else list(SUMMARY_TEMPLATES.keys())[0]
 
     try:
         chunks = _splitter.split_text(doc_text)

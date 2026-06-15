@@ -37,7 +37,7 @@ except ImportError:
 
 from .pipeline import NO_ANSWER_MSG, build_rag_chain, invalidate_cache, run_query
 from .prompts import CATEGORIES
-from .summarizer import summarize_document
+from .summarizer import classify_document_category, summarize_document
 
 __all__ = [
     # RAG
@@ -47,6 +47,7 @@ __all__ = [
     "NO_ANSWER_MSG",
     # 요약
     "summarize_document",
+    "classify_document_category",
     "CATEGORIES",
 ]
 
