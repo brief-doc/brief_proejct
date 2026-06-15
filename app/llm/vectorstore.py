@@ -23,6 +23,7 @@ def get_vectorstore() -> Chroma:
     global _instance
     if _instance is None:
         import os
+
         os.makedirs(CHROMA_DB_PATH, exist_ok=True)
         _instance = Chroma(
             persist_directory=CHROMA_DB_PATH,

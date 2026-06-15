@@ -46,12 +46,12 @@ else:
     _CE_OK = False
     print("[retriever] CrossEncoder 비활성 (ENABLE_RERANKER=true 로 활성화 가능)")
 
-from langchain_core.callbacks import CallbackManagerForRetrieverRun
-from langchain_core.documents import Document
-from langchain_core.retrievers import BaseRetriever
+from langchain_core.callbacks import CallbackManagerForRetrieverRun  # noqa: E402
+from langchain_core.documents import Document  # noqa: E402
+from langchain_core.retrievers import BaseRetriever  # noqa: E402
 
-from .config import RERANKER_MODEL, TOP_K_FINAL, TOP_K_RETRIEVE
-from .vectorstore import get_vectorstore
+from .config import RERANKER_MODEL, TOP_K_FINAL, TOP_K_RETRIEVE  # noqa: E402
+from .vectorstore import get_vectorstore  # noqa: E402
 
 # CrossEncoder 싱글톤
 _reranker: "CrossEncoder | None" = None
@@ -111,7 +111,7 @@ class HybridRetriever(BaseRetriever):
                 if results:
                     docs = results
                     if f is None and self.user_id is not None:
-                        print(f"[retriever] user_id 필터 결과 없음 → 전체 검색 fallback")
+                        print("[retriever] user_id 필터 결과 없음 → 전체 검색 fallback")
                     break
             except Exception as e:
                 print(f"[retriever] 쿼리 오류(filter={f}): {e}")

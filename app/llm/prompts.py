@@ -40,9 +40,7 @@ RAG_PROMPT = ChatPromptTemplate.from_messages(
         ("system", _RAG_SYSTEM + "\n\n" + _FEW_SHOT),
         (
             "human",
-            "[참고문서]\n{context}\n\n"
-            "[질문]\n{question}\n\n"
-            "[답변] 반드시 [문서 N] 형식으로 출처를 인용하며 합쇼체로 답변하십시오:",
+            "[참고문서]\n{context}\n\n[질문]\n{question}\n\n[답변] 반드시 [문서 N] 형식으로 출처를 인용하며 합쇼체로 답변하십시오:",
         ),
     ]
 )
@@ -102,8 +100,7 @@ CLASSIFY_PROMPT = ChatPromptTemplate.from_messages(
         ),
         (
             "human",
-            "[문서 내용]\n{text}\n\n"
-            "카테고리 (민사법/행정법/형사법/지식재산권 중 하나):",
+            "[문서 내용]\n{text}\n\n카테고리 (민사법/행정법/형사법/지식재산권 중 하나):",
         ),
     ]
 )
